@@ -1,0 +1,12 @@
+# Local Python and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Generated local verification output
+/output/
+
+# Accidental local shell transcript
+/h origin master
+
+# Editor and OS metadata

@@ -1031,7 +1031,7 @@ def test_cdp_session_delete_powershell_wrapper_invokes_launcher() -> None:
     assert "-B" in content
 
 
-def test_interactive_menu_runs_cdp_session_delete_from_install() -> None:
+def test_interactive_menu_keeps_cdp_diagnostics_out_of_default_install() -> None:
     content = (ROOT / "claude-zh-cn.ps1").read_text(encoding="utf-8-sig")
 
     assert "function Invoke-SessionDeleteCdp" in content
@@ -1044,9 +1044,11 @@ def test_interactive_menu_runs_cdp_session_delete_from_install() -> None:
     uninstall_start = content.index("function Invoke-Uninstall")
     menu_block = content[content.index("function Show-Menu"):]
 
-    assert "Invoke-SessionDeleteCdp" in install_block
+    assert "Invoke-SessionDeleteCdp" not in install_block
     assert "正在执行 chunk 界面标签、字体和会话增强 patch" in install_block
-    assert "正在尝试通过 CDP 追加注入会话增强" in install_block
+    assert "$postInstall = Get-PatchStatus" in install_block
+    assert "Get-TranslationMarkerCount" in install_block
+    assert "稳定 chunk 字体与会话增强已写入" in install_block
     assert "运行时注入已随 Claude 关闭失效" in content[uninstall_start:]
     assert "Show-ManagementPanel" in menu_block
     assert "0-5" in content
@@ -1058,6 +1060,11 @@ def test_powershell_has_management_diagnostics_and_bridge_scheduler() -> None:
     assert "function Show-ManagementPanel" in content
     assert "function Show-ManagementSnapshot" in content
     assert "function Get-ChunkPatchSummary" in content
+    assert "function Get-StatusChunkFiles" in content
+    assert "function Get-ManifestWhitelistChunkFiles" in content
+    assert "function Get-TranslationMarkerCount" in content
+    assert "FontRuntime = $hasFontRuntime" in content
+    assert "SessionRuntime = $hasSessionRuntime" in content
     assert "function Get-LocalDeleteBridgeProcesses" in content
     assert "function Start-LocalDeleteBridgeBackground" in content
     assert "function Install-LocalDeleteBridgeTask" in content
@@ -1071,6 +1078,34 @@ def test_powershell_has_management_diagnostics_and_bridge_scheduler() -> None:
     assert "-Background" in content
     assert "__CLAUDE_ZH_CN_FONT_PATCH__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__" in content
+
+
+def test_powershell_default_status_uses_targeted_chunk_checks() -> None:
+    content = (ROOT / "claude-zh-cn.ps1").read_text(encoding="utf-8-sig")
+
+    status_start = content.index("function Get-PatchStatus")
+    status_end = content.index("# \u2500\u2500 \u663e\u793a\u72b6\u6001", status_start)
+    status_block = content[status_start:status_end]
+    summary_start = content.index("function Get-ChunkPatchSummary")
+    summary_end = content.index("function Get-LocalDeleteBridgeProcesses", summary_start)
+    summary_block = content[summary_start:summary_end]
+    status_files_start = content.index("function Get-StatusChunkFiles")
+    status_files_end = content.index("function Get-ChunkPatchSummary", status_files_start)
+    status_files_block = content[status_files_start:status_files_end]
+    show_start = content.index("function Show-Status")
+    show_end = content.index("# \u2500\u2500 \u8d44\u6e90\u5b8c\u6574\u6027", show_start)
+    show_block = content[show_start:show_end]
+
+    assert "$whitelistFiles = Get-ChildItem" not in status_block
+    assert "$allChunkFiles = Get-ChildItem" not in summary_block
+    assert "Get-StatusChunkFiles" in summary_block
+    assert "$indexFiles = @()" in summary_block
+    assert "$statusFiles = @(Get-StatusChunkFiles)" in summary_block
+    assert "Get-IndexChunkFiles" not in status_files_block
+    assert "c6eedc03a-CsEFTfjy.js" in status_files_block
+    assert "ReadAllText" in summary_block
+    assert "\u6b63\u5728\u68c0\u67e5\u8865\u4e01\u72b6\u6001" in show_block
+    assert "\u5b57\u4f53\u4e0e\u4f1a\u8bdd\u589e\u5f3a\u5c06\u5728\u7ba1\u7406 / \u8bca\u65ad\u9762\u677f\u4e2d\u5b8c\u6574\u68c0\u67e5" in show_block
 
 
 def test_frontend_resource_key_translations() -> None:
@@ -1509,6 +1544,19 @@ def test_json_patch_patches_imported_language_menu_chunk() -> None:
             assert chunk.read_text(encoding="utf-8").count('"zh-CN"') == 1
             assert patch_json.patch_whitelist(resources) == "c34d1f91f-test.js"
             assert chunk.read_text(encoding="utf-8").count('"zh-CN"') == 1
+            state = json.loads(
+                (
+                    localappdata
+                    / "Claude-zh-CN-official-backup"
+                    / "json-only"
+                    / "patch-state.json"
+                ).read_text(encoding="utf-8")
+            )
+            assert state == {
+                "schema": 1,
+                "app_dir": str(app_dir),
+                "whitelist_files": ["ion-dist/assets/v1/c34d1f91f-test.js"],
+            }
         finally:
             if old_localappdata is None:
                 os.environ.pop("LOCALAPPDATA", None)
@@ -2696,6 +2744,7 @@ def main() -> int:
         test_python_install_detection_supports_anthropic_claude,
         test_noninteractive_scripts_support_app_dir,
         test_powershell_status_distinguishes_cleanup_states,
+        test_powershell_default_status_uses_targeted_chunk_checks,
         test_readme_no_longer_describes_dual_locale_modes,
         test_restore_removes_font_mirror_and_locale,
         test_chunk_patch_translates_keep_awake_label,

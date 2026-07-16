@@ -33,6 +33,16 @@ EMAIL_RE = re.compile(r"[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+")
 PATH_RE = re.compile(r"(?:~|\.{1,2})?[/\\][A-Za-z0-9_.+\\/-]+")
 SNAKE_IDENTIFIER_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b")
 HEADER_IDENTIFIER_RE = re.compile(r"\b[A-Z][A-Za-z0-9]+(?:-[A-Za-z0-9]+)+\b")
+CORRUPT_CONTENT_PATTERNS = [
+    re.compile(r"\u5185\u5bb9\s+\u5185\u5bb9"),
+    re.compile(r"\{\u5185\u5bb9(?:[},]|\})?"),
+    re.compile(r"</?\u5185\u5bb9\b|\u5185\u5bb9>"),
+    re.compile(r"\u5185\u5bb9_\u5185\u5bb9"),
+    re.compile(r"Claude\u5185\u5bb9|(?<!\u76f8)\u5173\u5185\u5bb9|\u8fde\u63a5\u5185\u5bb9|\u5185\u5bb9\u4f4e"),
+    re.compile(r"(?:\u6a21\u578b|\u89d2\u8272|\u9879\u76ee|\u5de5\u5177|\u6587\u4ef6|\u547d\u4ee4|\u8fde\u63a5\u5668)s\b"),
+    re.compile(r"^\?{4,}$"),
+]
+UNTRANSLATED_PREFIXES = ("\u5f85\u7ffb\u8bd1\uff1a", "\u5f85\u8865\u5145\u7ffb\u8bd1\uff1a")
 
 
 ALLOWED_MIXED_WORDS = {
@@ -50,8 +60,14 @@ ALLOWED_MIXED_WORDS = {
     "anthropic",
     "amzn",
     "api",
+    "appstore",
+    "auto",
+    "auth0",
+    "aud",
+    "audit",
     "apis",
     "app",
+    "application",
     "apps",
     "applocker",
     "apple",
@@ -63,6 +79,7 @@ ALLOWED_MIXED_WORDS = {
     "azure",
     "baa",
     "bash",
+    "brave",
     "basic",
     "cidr",
     "bedrock",
@@ -76,6 +93,7 @@ ALLOWED_MIXED_WORDS = {
     "canva",
     "chat",
     "chrome",
+    "chromeos",
     "cimd",
     "claude",
     "claude.ai",
@@ -105,6 +123,7 @@ ALLOWED_MIXED_WORDS = {
     "cvc",
     "dau",
     "deck",
+    "deep",
     "center",
     "certificate",
     "desktop",
@@ -126,6 +145,7 @@ ALLOWED_MIXED_WORDS = {
     "endpoint",
     "escape",
     "excel",
+    "extendedsdkmessage",
     "export",
     "fable",
     "favicon",
@@ -198,6 +218,8 @@ ALLOWED_MIXED_WORDS = {
     "method",
     "mfa",
     "metrics",
+    "mtls",
+    "mythos",
     "microsoft",
     "monorepo",
     "nest",
@@ -233,6 +255,8 @@ ALLOWED_MIXED_WORDS = {
     "prompt",
     "pptx",
     "protobuf",
+    "qemu",
+    "modprobe",
     "proxy",
     "plugin",
     "plugins",
@@ -242,9 +266,11 @@ ALLOWED_MIXED_WORDS = {
     "react",
     "readonlyhint",
     "rbac",
+    "rfc",
     "redirect",
     "regex",
     "research",
+    "results",
     "rest",
     "rum",
     "rrggbb",
@@ -280,11 +306,14 @@ ALLOWED_MIXED_WORDS = {
     "sso",
     "stdio",
     "streamable",
+    "staging",
     "stdout",
     "sts",
     "subject",
+    "sudo",
     "supabase",
     "tab",
+    "tavily",
     "team",
     "teams",
     "textlocal",
@@ -298,12 +327,14 @@ ALLOWED_MIXED_WORDS = {
     "twitter",
     "twilio",
     "uart",
+    "userpromptsubmit",
     "ui",
     "unlimited",
     "ultrareview",
     "ultracode",
     "url",
     "urls",
+    "vault",
     "usb",
     "utf-8",
     "vertex",
@@ -423,9 +454,13 @@ ALLOWED_MIXED_WORDS = {
     "with",
     "worker",
     "vm",
+    "vhost",
+    "vsock",
     "vpc",
     "wau",
     "web",
+    "webfetch",
+    "websearch",
     "webhook",
     "webhooks",
     "when",
@@ -437,7 +472,12 @@ ALLOWED_MIXED_WORDS = {
     "workspace",
     "xlsx",
     "xcode",
-    "zdr",
+    "zdr",    "store",
+    "read",
+    "hardware",
+    "haiku",
+    "identityserver",
+
 }
 
 
@@ -603,11 +643,19 @@ def has_unapproved_ascii_words(value: str) -> bool:
     return False
 
 
+def has_corrupt_content_translation(value: str) -> bool:
+    return any(pattern.search(value) for pattern in CORRUPT_CONTENT_PATTERNS)
+
+
 def classify_value(value: str) -> str | None:
     if not isinstance(value, str):
         return None
     if is_known_ok(value):
         return None
+    if value.startswith(UNTRANSLATED_PREFIXES):
+        return "untranslated_marker"
+    if has_corrupt_content_translation(value):
+        return "corrupt_content_translation"
     if has_unapproved_ascii_words(value):
         return "likely_untranslated"
     return None
@@ -630,12 +678,12 @@ def main() -> int:
         for key, value in data.items():
             kind = classify_value(value)
             if kind:
-                issues.append((key, value))
+                issues.append((key, kind, value))
 
         report_lines.append(f"## {target['name']}")
         report_lines.append(f"suspect_count: {len(issues)}")
-        for key, value in issues:
-            report_lines.append(f"- {key}: {value}")
+        for key, kind, value in issues:
+            report_lines.append(f"- {key} [{kind}]: {value}")
         report_lines.append("")
         total_issues += len(issues)
 

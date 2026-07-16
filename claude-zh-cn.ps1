@@ -209,13 +209,12 @@ function Get-PatchStatus {
 
   $hasZhFiles = (Test-Path $zhDesktop) -and (Test-Path $zhFrontend) -and (Test-Path $zhStatsig)
 
-  # 检查白名单
-  $hasWhitelist = $false
-  $indexFiles = Get-ChildItem (Join-Path $resDir 'ion-dist\assets') -Recurse -File -Filter 'index-*.js' -ErrorAction SilentlyContinue
-  foreach ($f in $indexFiles) {
-    $content = [System.IO.File]::ReadAllText($f.FullName)
-    if ($content.Contains('"zh-CN"')) { $hasWhitelist = $true; break }
-  }
+  # 快速检查语言白名单
+  $chunk = Get-ChunkPatchSummary
+  $hasWhitelist = $chunk.ZhWhitelistMarkers -gt 0
+  $hasFontRuntime = $null
+  $hasSessionRuntime = $null
+  $hasRuntime = $null
 
   # 检查 locale
   $hasLocale = $false
@@ -244,6 +243,9 @@ function Get-PatchStatus {
     ZhFiles    = $hasZhFiles
     Whitelist  = $hasWhitelist
     Locale     = $hasLocale
+    FontRuntime = $hasFontRuntime
+    SessionRuntime = $hasSessionRuntime
+    Runtime    = $hasRuntime
     Backup     = $hasBackup
     HasArtifacts = $hasArtifacts
     State      = $state
@@ -253,6 +255,7 @@ function Get-PatchStatus {
 
 # ── 显示状态 ──────────────────────────────────────────────
 function Show-Status {
+  Write-Info '正在检查补丁状态...'
   $s = Get-PatchStatus
 
   Write-Title '当前状态'
@@ -263,6 +266,7 @@ function Show-Status {
   if ($s.ZhFiles)   { Write-OK   '中文资源文件已写入' }   else { Write-Info '中文资源文件未写入' }
   if ($s.Whitelist)  { Write-OK   '语言白名单已包含 zh-CN' } else { Write-Info '语言白名单未包含 zh-CN' }
   if ($s.Locale)     { Write-OK   'locale 已设为 zh-CN' }   else { Write-Info 'locale 未设置' }
+  if ($null -eq $s.Runtime) { Write-Info 'chunk 字体与会话增强将在管理 / 诊断面板中完整检查' } elseif ($s.Runtime)    { Write-OK   'chunk 字体与会话增强已写入' } else { Write-Warn 'chunk 字体或会话增强未完整写入' }
   if ($s.Backup)     { Write-OK   '备份存在' }             else { Write-Info '无备份' }
 
   Write-Host ''
@@ -277,10 +281,34 @@ function Show-Status {
   return $s
 }
 
+# ── 资源完整性 ────────────────────────────────────────────
+function Get-TranslationMarkerCount {
+  $files = @(
+    (Join-Path $scriptDir 'resources\desktop-zh-CN.json'),
+    (Join-Path $scriptDir 'resources\frontend-zh-CN.json'),
+    (Join-Path $scriptDir 'resources\statsig-zh-CN.json')
+  )
+  $total = 0
+  foreach ($file in $files) {
+    if (-not (Test-Path $file)) { continue }
+    try {
+      $content = [System.IO.File]::ReadAllText($file)
+      $total += ([regex]::Matches($content, '待翻译：|待补充翻译：')).Count
+    } catch {}
+  }
+  return $total
+}
+
 # ── 安装 ──────────────────────────────────────────────────
 function Invoke-Install {
   Write-Title '安装中文补丁'
   Write-Host ''
+
+  $translationMarkers = Get-TranslationMarkerCount
+  if ($translationMarkers -gt 0) {
+    Write-Err "本地中文资源中还有 $translationMarkers 条待翻译标记。完成汉化后再安装，避免将标记写入 Claude。"
+    return
+  }
 
   Write-Info '正在关闭 Claude 进程...'
   Get-Process -Name claude -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
@@ -301,11 +329,32 @@ function Invoke-Install {
   Write-Host ''
   & $python.Source "$scriptDir\patch_chunks_zh_cn.py" --app-dir "$appDir"
 
-  Write-Host ''
-  Write-Info '正在尝试通过 CDP 追加注入会话增强（失败不影响已写入的 chunk 补丁）...'
-  Invoke-SessionDeleteCdp
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host ''
+    Write-Err 'chunk 补丁失败。请检查上面的错误信息。'
+    return
+  }
+
+  $postInstall = Get-PatchStatus
+  if (-not $postInstall.Installed) {
+    Write-Host ''
+    Write-Err 'JSON 资源或语言白名单未通过安装后校验。'
+    return
+  }
 
   Write-Host ''
+  Write-Info '正在验证 chunk 字体与会话增强...'
+  $runtimeChunk = Get-ChunkPatchSummary -FullScan
+  $postInstall.FontRuntime = $runtimeChunk.FontMarkers -gt 0
+  $postInstall.SessionRuntime = $runtimeChunk.SessionMarkers -gt 0
+  $postInstall.Runtime = $postInstall.FontRuntime -and $postInstall.SessionRuntime
+
+  if ($postInstall.Runtime) {
+    Write-OK '稳定 chunk 字体与会话增强已写入。CDP 仅在管理 / 诊断面板中按需运行。'
+  } else {
+    Write-Warn 'JSON 中文补丁已写入；chunk 运行时标记未完整确认。请在管理 / 诊断面板中运行 CDP 行诊断。'
+  }
+
   Write-OK '安装完成！'
   Write-Host ''
   Write-Info '下一步：'
@@ -366,16 +415,120 @@ function Get-IndexChunkFiles {
   return @(Get-ChildItem $assetsRoot -Recurse -File -Filter 'index-*.js' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
 }
 
+function Get-ManifestWhitelistChunkFiles {
+  $manifestPath = Join-Path $backupRoot 'patch-state.json'
+  if (-not (Test-Path $manifestPath)) {
+    return @()
+  }
+
+  try {
+    $state = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  } catch {
+    return @()
+  }
+
+  $manifestAppDir = [string]$state.app_dir
+  if (
+    -not [string]::IsNullOrWhiteSpace($manifestAppDir) -and
+    -not [string]::Equals($manifestAppDir, $appDir, [System.StringComparison]::OrdinalIgnoreCase)
+  ) {
+    return @()
+  }
+
+  $files = @()
+  foreach ($relativePathValue in @($state.whitelist_files)) {
+    $relativePath = [string]$relativePathValue
+    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+      continue
+    }
+    $relativePath = $relativePath -replace '/', '\'
+    if (
+      [System.IO.Path]::IsPathRooted($relativePath) -or
+      $relativePath -match '(^|\\)\.\.(\\|$)' -or
+      $relativePath -notmatch '^(?i:ion-dist\\assets\\)'
+    ) {
+      continue
+    }
+
+    $candidate = Join-Path $resDir $relativePath
+    if (Test-Path $candidate) {
+      try {
+        $files += Get-Item -LiteralPath $candidate -ErrorAction Stop
+      } catch {}
+    }
+  }
+
+  return @($files)
+}
+
+function Get-StatusChunkFiles {
+  $files = @(Get-ManifestWhitelistChunkFiles)
+  if ($files.Count -eq 0) {
+    $assetDirs = @(Get-AssetsVersionDirs $resDir)
+    foreach ($assetDir in $assetDirs) {
+      $currentWhitelist = Join-Path $assetDir 'c6eedc03a-CsEFTfjy.js'
+      if (Test-Path $currentWhitelist) {
+        try {
+          $files += Get-Item -LiteralPath $currentWhitelist -ErrorAction Stop
+        } catch {}
+      }
+    }
+
+    if ($files.Count -eq 0) {
+      foreach ($assetDir in $assetDirs) {
+        foreach ($pattern in @('c6eedc03a-*.js', 'c34d1f91f-*.js', 'index-*.js')) {
+          $candidate = Get-ChildItem -LiteralPath $assetDir -File -Filter $pattern -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if ($candidate) {
+            $files += $candidate
+            break
+          }
+        }
+      }
+    }
+  }
+
+  $seen = @{}
+  $result = @()
+  foreach ($file in $files) {
+    if ($null -eq $file -or [string]::IsNullOrWhiteSpace($file.FullName)) {
+      continue
+    }
+    if ($seen.ContainsKey($file.FullName)) {
+      continue
+    }
+    $seen[$file.FullName] = $true
+    $result += $file
+  }
+
+  return @($result)
+}
 function Get-ChunkPatchSummary {
-  $indexFiles = Get-IndexChunkFiles
+  param([switch]$FullScan)
+
+  if ($FullScan) {
+    $indexFiles = @(Get-IndexChunkFiles)
+    $statusFiles = @(Get-ChildItem (Join-Path $resDir 'ion-dist\assets') -Recurse -File -Filter '*.js' -ErrorAction SilentlyContinue)
+  } else {
+    $indexFiles = @()
+    $statusFiles = @(Get-StatusChunkFiles)
+  }
+
   $fontMarkers = 0
   $sessionMarkers = 0
   $zhWhitelistMarkers = 0
+  $indexFilePaths = @{}
   foreach ($f in $indexFiles) {
+    $indexFilePaths[$f.FullName] = $true
+  }
+  foreach ($f in $statusFiles) {
     try {
       $content = [System.IO.File]::ReadAllText($f.FullName)
-      if ($content.Contains('__CLAUDE_ZH_CN_FONT_PATCH__')) { $fontMarkers++ }
-      if ($content.Contains('__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__')) { $sessionMarkers++ }
+      if ($indexFilePaths.ContainsKey($f.FullName)) {
+        if ($content.Contains('__CLAUDE_ZH_CN_FONT_PATCH__')) { $fontMarkers++ }
+        if ($content.Contains('__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__')) { $sessionMarkers++ }
+      }
       if ($content.Contains('"zh-CN"')) { $zhWhitelistMarkers++ }
     } catch {}
   }
@@ -389,7 +542,6 @@ function Get-ChunkPatchSummary {
     ZhWhitelistMarkers = $zhWhitelistMarkers
   }
 }
-
 function Get-LocalDeleteBridgeProcesses {
   try {
     $items = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
@@ -474,7 +626,8 @@ function Invoke-CdpRowDiagnostics {
 
 function Show-ManagementSnapshot {
   $s = Get-PatchStatus
-  $chunk = Get-ChunkPatchSummary
+  Write-Info '正在执行完整 chunk 诊断...'
+  $chunk = Get-ChunkPatchSummary -FullScan
   $bridgeProcesses = Get-LocalDeleteBridgeProcesses
   $bridgeTask = Get-LocalDeleteBridgeTask
   $version = Get-ClaudeVersionLabel

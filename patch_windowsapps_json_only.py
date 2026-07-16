@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 RESOURCES = ROOT / "resources"
 BACKUP_ROOT = Path(os.environ["LOCALAPPDATA"]) / "Claude-zh-CN-official-backup" / "json-only"
+PATCH_STATE_PATH = BACKUP_ROOT / "patch-state.json"
 CONFIG_PATH = Path(os.environ["APPDATA"]) / "Claude-3p" / "config.json"
 
 
@@ -215,6 +216,35 @@ def write_text_best_effort(path: Path, text: str, *, context: str) -> bool:
         return False
 
 
+def write_patch_state(app_resources: Path, whitelist_files: list[Path]) -> None:
+    """Persist the exact language-whitelist chunks used by the current install."""
+    relative_paths: list[str] = []
+    for path in whitelist_files:
+        try:
+            relative_paths.append(path.relative_to(app_resources).as_posix())
+        except ValueError:
+            continue
+    if not relative_paths:
+        return
+
+    try:
+        PATCH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"Warning: cannot create patch state directory at {PATCH_STATE_PATH.parent}: {e}")
+        return
+
+    payload = {
+        "schema": 1,
+        "app_dir": str(app_resources.parent),
+        "whitelist_files": sorted(set(relative_paths)),
+    }
+    write_text_best_effort(
+        PATCH_STATE_PATH,
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        context="patch state",
+    )
+
+
 def should_patch_locale_array(locales: list[str], *, legacy_index_list: bool) -> bool:
     if not locales or locales[0] != "en-US":
         return False
@@ -278,7 +308,7 @@ def patch_whitelist(app_resources: Path) -> str | None:
         print("Warning: no candidate JS bundle found; skipping whitelist patch")
         return None
 
-    touched: list[str] = []
+    touched: list[Path] = []
     for path in candidates:
         text = path.read_text(encoding="utf-8")
         legacy_index_list = path.name.startswith("index-")
@@ -286,15 +316,16 @@ def patch_whitelist(app_resources: Path) -> str | None:
         if not found:
             continue
         if not changed:
-            touched.append(path.name)
+            touched.append(path)
             continue
 
         backup_file(path, app_resources)
         if write_text_best_effort(path, patched, context="whitelist patch"):
-            touched.append(path.name)
+            touched.append(path)
 
     if touched:
-        return ", ".join(touched)
+        write_patch_state(app_resources, touched)
+        return ", ".join(path.name for path in touched)
 
     print("Warning: whitelist pattern not found in any index bundle")
     return None
