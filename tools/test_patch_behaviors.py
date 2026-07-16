@@ -1289,9 +1289,29 @@ def test_frontend_text_size_extreme_label_is_translated_as_extra_high() -> None:
 
     assert data["kDEj60CmLq"] == "超高"
     assert data["kkjl2vQekD"] == "超高"
-    assert data["9dx43BqWHy"] == "更快"
-    assert data["bTBJTYxUYl"] == "更智能"
     assert statsig["HoZQmASaw3"] == "超高"
+
+
+def test_frontend_effort_slider_and_ultracode_terms_are_translated() -> None:
+    data = json.loads((ROOT / "resources" / "frontend-zh-CN.json").read_text(encoding="utf-8-sig"))
+
+    expected = {
+        "VKZ/U8vAsk": "推理强度",
+        "iEfZH5cyl6": "关于推理强度",
+        "TRhvKflygs": "更高的推理强度会带来更全面的回答，但耗时更长，也会更快消耗你的额度。",
+        "9dx43BqWHy": "响应更快",
+        "bTBJTYxUYl": "回答更深入",
+        "3EaeMr9hCZ": "更改推理强度？",
+        "EYOanHZfsA": "打开推理强度选择器",
+        "uYLQ5lDLZu": "使用模型选择器旁的滑杆选择推理强度",
+        "waSR82Iwd2": "无法应用推理强度更改。你可以重试。",
+        "7WkvzNBqWd": "最高推理强度可能使用过多 token，导致触及限制。请考虑使用较低的推理强度设置。",
+        "zELfAL6AAI": "你的下一条回复会更慢，并使用更多 token。此任务已按当前推理强度缓存。切换到 <bold>{targetLabel}</bold> 意味着下一条消息会重新读取完整历史。",
+        "ufa5QA7ilZ": "Ultracode",
+        "txnCFU+qli": "Ultracode 结合超高推理强度与工作流。它的回答最全面、耗时最长，也最消耗你的额度。仅适用于当前对话；新对话默认不会启用。",
+    }
+
+    assert {key: data[key] for key in expected} == expected
 
 
 def test_frontend_webhook_label_is_translated() -> None:
@@ -2686,10 +2706,32 @@ def test_sync_i18n_updates_placeholders_and_keeps_technical_values() -> None:
     assert summary["desktop"]["updated"] == 1
     assert data["existing"] == "打开设置向导"
     assert data["new-action"] == "复制组织 ID"
-    assert data["faster"] == "更快"
-    assert data["smarter"] == "更智能"
+    assert data["faster"] == "响应更快"
+    assert data["smarter"] == "回答更深入"
     assert data["extra"] == "超高"
     assert data["technical"] == "~/Documents/work"
+
+
+def test_sync_i18n_preserves_effort_slider_terms() -> None:
+    sync = load_module("sync_i18n_effort_terms_test", ROOT / "tools" / "sync_i18n_from_installed.py")
+
+    expected = {
+        "Effort": "推理强度",
+        "About effort": "关于推理强度",
+        "Higher effort means more thorough responses, but takes longer and uses your limits faster.": "更高的推理强度会带来更全面的回答，但耗时更长，也会更快消耗你的额度。",
+        "Faster": "响应更快",
+        "Smarter": "回答更深入",
+        "Change effort level?": "更改推理强度？",
+        "Open effort selector": "打开推理强度选择器",
+        "Choose effort with a slider next to the model picker": "使用模型选择器旁的滑杆选择推理强度",
+        "Effort change couldn’t be applied. You can try again.": "无法应用推理强度更改。你可以重试。",
+        "Max effort can use excessive tokens resulting in hitting limits. Consider using a lower effort setting.": "最高推理强度可能使用过多 token，导致触及限制。请考虑使用较低的推理强度设置。",
+        "Your next response will be slower and use more tokens. This task is cached for the current effort level. Switching to <bold>{targetLabel}</bold> means the full history gets re-read on your next message.": "你的下一条回复会更慢，并使用更多 token。此任务已按当前推理强度缓存。切换到 <bold>{targetLabel}</bold> 意味着下一条消息会重新读取完整历史。",
+        "Ultracode": "Ultracode",
+        "Ultracode is xhigh effort plus workflows. Most thorough, slowest, and heaviest on your limits. Applies to this chat only. New chats start without it.": "Ultracode 结合超高推理强度与工作流。它的回答最全面、耗时最长，也最消耗你的额度。仅适用于当前对话；新对话默认不会启用。",
+    }
+
+    assert {source: sync.translate_value(source, {}) for source in expected} == expected
 
 
 def test_sync_i18n_skips_missing_installed_resource() -> None:
@@ -2739,6 +2781,7 @@ def main() -> int:
         test_font_runtime_updates_marked_injection,
         test_frontend_resource_key_translations,
         test_brand_and_model_names_stay_in_english,
+        test_frontend_effort_slider_and_ultracode_terms_are_translated,
         test_desktop_menu_translations,
         test_powershell_has_manual_app_dir_fallback,
         test_python_install_detection_supports_anthropic_claude,
@@ -2755,6 +2798,7 @@ def main() -> int:
         test_restore_ignores_legacy_full_patch_when_current_backups_exist,
         test_restore_reverts_stale_chunk_backup_translations,
         test_sync_i18n_updates_placeholders_and_keeps_technical_values,
+        test_sync_i18n_preserves_effort_slider_terms,
         test_sync_i18n_skips_missing_installed_resource,
     ]
     for test in tests:

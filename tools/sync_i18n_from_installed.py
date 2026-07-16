@@ -261,6 +261,25 @@ EXACT_TRANSLATIONS = {
 }
 
 
+EFFORT_TRANSLATIONS = {
+    "Effort": "推理强度",
+    "About effort": "关于推理强度",
+    "Higher effort means more thorough responses, but takes longer and uses your limits faster.": "更高的推理强度会带来更全面的回答，但耗时更长，也会更快消耗你的额度。",
+    "Faster": "响应更快",
+    "Smarter": "回答更深入",
+    "Change effort level?": "更改推理强度？",
+    "Open effort selector": "打开推理强度选择器",
+    "Choose effort with a slider next to the model picker": "使用模型选择器旁的滑杆选择推理强度",
+    "Effort change couldn’t be applied. You can try again.": "无法应用推理强度更改。你可以重试。",
+    "Max effort can use excessive tokens resulting in hitting limits. Consider using a lower effort setting.": "最高推理强度可能使用过多 token，导致触及限制。请考虑使用较低的推理强度设置。",
+    "Your next response will be slower and use more tokens. This task is cached for the current effort level. Switching to <bold>{targetLabel}</bold> means the full history gets re-read on your next message.": "你的下一条回复会更慢，并使用更多 token。此任务已按当前推理强度缓存。切换到 <bold>{targetLabel}</bold> 意味着下一条消息会重新读取完整历史。",
+    "Ultracode": "Ultracode",
+    "Ultracode is xhigh effort plus workflows. Most thorough, slowest, and heaviest on your limits. Applies to this chat only. New chats start without it.": "Ultracode 结合超高推理强度与工作流。它的回答最全面、耗时最长，也最消耗你的额度。仅适用于当前对话；新对话默认不会启用。",
+}
+
+EXACT_TRANSLATIONS.update(EFFORT_TRANSLATIONS)
+
+
 FRAGMENT_TRANSLATIONS = {
     "absolute path": "绝对路径",
     "account": "账号",
