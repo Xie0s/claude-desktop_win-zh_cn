@@ -15,7 +15,10 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
+
+from best_effort_io import ensure_admin_for_windowsapps, print_permission_denied_hint
 
 
 BACKUP_ROOT = Path(os.environ["LOCALAPPDATA"]) / "Claude-zh-CN-official-backup" / "chunks"
@@ -504,7 +507,7 @@ svg text, svg tspan {{
 def session_delete_inject_script() -> str:
     body = r'''
 ;(()=>{
-  const VERSION = "41";
+  const VERSION = "42";
   try {
   if (globalThis.__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_VERSION__ === VERSION) return;
   globalThis.__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__ = true;
@@ -1091,6 +1094,19 @@ def session_delete_inject_script() -> str:
     return false;
   }
 
+  function looksLikeThirdPartyProviderToolbar(row, text) {
+    if (rowId(row) || looksLikeChatHref(rowHref(row))) return false;
+    const value = stripInjectedActionText([
+      row.getAttribute?.("aria-label"),
+      row.getAttribute?.("title"),
+      text || rowVisibleText(row)
+    ].filter(Boolean).join(" ")).replace(/\s+/g, " ").trim();
+    if (!/^[^·•]{1,80}\s*[·•]\s*(?:第三方|Third[\s-]*party|Gateway)\s*$/i.test(value)) return false;
+    return hasNativeRowControl(row)
+      || row.matches?.("[role='heading']")
+      || !!row.querySelector?.("[aria-haspopup],[data-radix-menu-trigger]");
+  }
+
   function hasRecentsSectionHint(panel) {
     const text = rowVisibleText(panel).slice(0, 1200);
     return /(?:最近|历史|Recent(?:s| conversations| chats)?|History|聊天|Chat|会话)/i.test(text);
@@ -1469,6 +1485,7 @@ def session_delete_inject_script() -> str:
     const isCurrentConversation = isCurrentRecentsItem(row, text);
     const hasConversationSignal = hasSessionSignal(row) || isCurrentConversation;
     if (isBlankOrStatusDotRow(row, text)) return "blank-or-dot";
+    if (looksLikeThirdPartyProviderToolbar(row, text)) return "third-party-provider-toolbar";
     if (looksLikeModeOrToolbarChrome(row, text)) return "mode-or-toolbar";
     if (looksLikeNewSessionCommand(row, text)) return "new-session-command";
     if (!hasConversationSignal && looksLikeSidebarChrome(row, text)) return "sidebar-chrome";
@@ -3073,6 +3090,7 @@ def copy2_best_effort(src: Path, dst: Path, *, context: str) -> bool:
             return True
         except OSError as e:
             print(f"Warning: cannot copy {context} from {src} to {dst}: {e}; skipping")
+            print_permission_denied_hint(dst)
             return False
     except OSError as e:
         print(f"Warning: cannot copy {context} from {src} to {dst}: {e}; skipping")
@@ -3119,6 +3137,7 @@ def write_text_best_effort(path: Path, text: str, *, context: str) -> bool:
             return True
         except OSError as e:
             print(f"Warning: cannot write {context} at {path}: {e}; skipping")
+            print_permission_denied_hint(path)
             return False
     except OSError as e:
         print(f"Warning: cannot write {context} at {path}: {e}; skipping")
@@ -3639,6 +3658,14 @@ def main() -> int:
 
     if not app_dir or not app_dir.exists():
         raise SystemExit("Claude app directory not found.")
+
+    elevation_exit = ensure_admin_for_windowsapps(
+        app_dir,
+        Path(__file__).resolve(),
+        sys.argv[1:],
+    )
+    if elevation_exit is not None:
+        return elevation_exit
 
     assets_root = app_dir / "resources" / "ion-dist" / "assets"
     if not assets_root.exists():

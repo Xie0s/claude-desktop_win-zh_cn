@@ -477,6 +477,18 @@ ALLOWED_MIXED_WORDS = {
     "hardware",
     "haiku",
     "identityserver",
+    "emulator",
+    "encryptioncontext",
+    "frontmatter",
+    "meridian",
+    "okta",
+    "priya",
+    "repair",
+    "scripts",
+    "simulator",
+    "siri",
+    "udid",
+    "worktreecreate",
 
 }
 

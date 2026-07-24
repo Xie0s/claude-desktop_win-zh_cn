@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import subprocess
 import tempfile
-from unittest import mock
+from contextlib import redirect_stdout
 from pathlib import Path
-
-import best_effort_io
-
+from unittest import mock
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import best_effort_io
 
 
 def load_module(name: str, path: Path):
@@ -127,7 +131,7 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_END__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_VERSION__" in content
-    assert 'const VERSION = "41"' in content
+    assert 'const VERSION = "42"' in content
     assert "claude-zh-cn-session-delete-button" in content
     assert "claude-zh-cn-session-export-button" in content
     assert "claude-zh-cn-session-move-button" in content
@@ -190,6 +194,9 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "function isBlankOrStatusDotRow" in content
     assert "function looksLikeModeOrToolbarChrome" in content
     assert "mode-or-toolbar" in content
+    assert "function looksLikeThirdPartyProviderToolbar" in content
+    assert "third-party-provider-toolbar" in content
+    assert "Third[\s-]*party|Gateway" in content
     assert "href.match(/(?:chat|conversation|thread|session)(?:\\/|=|:|-)([A-Za-z0-9_.-]+)/i)" in content
     assert "href.match(/\\/([A-Za-z0-9_-]{8,})(?:[/?#]|$)/)" not in content
     assert "function hasNativeRowControl" in content
@@ -1351,6 +1358,29 @@ def test_powershell_has_manual_app_dir_fallback() -> None:
     assert "[3] 手动指定 Claude app 目录" in content
 
 
+def test_powershell_requests_uac_when_not_admin() -> None:
+    content = (ROOT / "claude-zh-cn.ps1").read_text(encoding="utf-8-sig")
+
+    assert "正在请求管理员权限" in content
+    assert "Start-Process" in content
+    assert "-Verb RunAs" in content
+    assert "$PSCommandPath" in content
+    assert "未获得管理员权限" in content
+
+
+def test_noninteractive_scripts_request_uac_when_not_admin() -> None:
+    for relative in [
+        "install-windowsapps-json-only.ps1",
+        "restore-windowsapps-zh-cn.ps1",
+    ]:
+        content = (ROOT / relative).read_text(encoding="utf-8-sig")
+        assert "正在请求管理员权限" in content
+        assert "Start-Process" in content
+        assert "-Verb RunAs" in content
+        assert "$PSCommandPath" in content
+        assert "未获得管理员权限" in content
+
+
 def test_python_install_detection_supports_anthropic_claude() -> None:
     for relative in [
         "patch_windowsapps_json_only.py",
@@ -1363,6 +1393,79 @@ def test_python_install_detection_supports_anthropic_claude() -> None:
         assert "WindowsApps" in content
         assert "Get-AppxPackage -Name Claude" in content
         assert "windowsapps_version_key" in content
+
+
+def test_python_mutating_entrypoints_use_windowsapps_admin_gate() -> None:
+    for relative in [
+        "patch_windowsapps_json_only.py",
+        "patch_chunks_zh_cn.py",
+        "restore_claude_zh_cn_windowsapps.py",
+    ]:
+        content = (ROOT / relative).read_text(encoding="utf-8-sig")
+        assert "ensure_admin_for_windowsapps" in content
+        assert "print_permission_denied_hint" in content
+        assert "Path(__file__).resolve()" in content
+        assert "sys.argv[1:]" in content
+
+
+def test_windowsapps_admin_gate_relaunches_when_not_admin() -> None:
+    script_path = ROOT / "patch_windowsapps_json_only.py"
+    script_args = ["--app-dir", r"C:\Program Files\WindowsApps\Claude_test\app"]
+    output = io.StringIO()
+
+    with (
+        mock.patch.object(best_effort_io, "is_windowsapps_path", return_value=True),
+        mock.patch.object(best_effort_io, "is_windows_admin", return_value=False),
+        mock.patch.object(best_effort_io, "relaunch_as_admin", return_value=True) as relaunch,
+        redirect_stdout(output),
+    ):
+        result = best_effort_io.ensure_admin_for_windowsapps(
+            Path(script_args[1]),
+            script_path,
+            script_args,
+        )
+
+    assert result == 0
+    relaunch.assert_called_once_with(script_path, script_args)
+    assert "正在请求管理员权限" in output.getvalue()
+    assert "已启动管理员进程" in output.getvalue()
+
+
+def test_windowsapps_admin_gate_reports_declined_uac() -> None:
+    script_path = ROOT / "patch_windowsapps_json_only.py"
+    output = io.StringIO()
+
+    with (
+        mock.patch.object(best_effort_io, "is_windowsapps_path", return_value=True),
+        mock.patch.object(best_effort_io, "is_windows_admin", return_value=False),
+        mock.patch.object(best_effort_io, "relaunch_as_admin", return_value=False),
+        redirect_stdout(output),
+    ):
+        result = best_effort_io.ensure_admin_for_windowsapps(
+            Path(r"C:\Program Files\WindowsApps\Claude_test\app"),
+            script_path,
+            [],
+        )
+
+    assert result == 1
+    assert "未获得管理员权限" in output.getvalue()
+    assert "以管理员身份运行" in output.getvalue()
+
+
+def test_permission_denied_hint_is_actionable() -> None:
+    output = io.StringIO()
+
+    with redirect_stdout(output):
+        best_effort_io.print_permission_denied_hint(
+            Path(r"C:\Program Files\WindowsApps\Claude_test\app\resources\zh-CN.json")
+        )
+
+    message = output.getvalue()
+    assert "权限不足" in message
+    assert "关闭 Claude" in message
+    assert "管理员身份" in message
+    assert "可能原因" in message
+    assert "处理步骤" in message
 
 
 def test_noninteractive_scripts_support_app_dir() -> None:
@@ -2006,7 +2109,7 @@ def test_assets_tree_injects_session_tools_runtime() -> None:
     assert "claude-zh-cn-session-delete-button" in content
     assert "claude-zh-cn-session-export-button" in content
     assert "claude-zh-cn-conversation-timeline" in content
-    assert 'const VERSION = "41"' in content
+    assert 'const VERSION = "42"' in content
 
 
 def test_chunk_patch_translates_custom_label() -> None:
@@ -2784,7 +2887,13 @@ def main() -> int:
         test_frontend_effort_slider_and_ultracode_terms_are_translated,
         test_desktop_menu_translations,
         test_powershell_has_manual_app_dir_fallback,
+        test_noninteractive_scripts_request_uac_when_not_admin,
+        test_powershell_requests_uac_when_not_admin,
         test_python_install_detection_supports_anthropic_claude,
+        test_python_mutating_entrypoints_use_windowsapps_admin_gate,
+        test_windowsapps_admin_gate_relaunches_when_not_admin,
+        test_windowsapps_admin_gate_reports_declined_uac,
+        test_permission_denied_hint_is_actionable,
         test_noninteractive_scripts_support_app_dir,
         test_powershell_status_distinguishes_cleanup_states,
         test_powershell_default_status_uses_targeted_chunk_checks,

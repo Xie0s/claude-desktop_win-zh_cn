@@ -280,6 +280,53 @@ EFFORT_TRANSLATIONS = {
 EXACT_TRANSLATIONS.update(EFFORT_TRANSLATIONS)
 
 
+QUALITY_TRANSLATIONS = {
+    "RECOMMENDED": "推荐",
+    "Open it on GitHub instead.": "改为在 GitHub 上打开。",
+    "Failed to update Routines setting. You can try again.": "更新例程设置失败。你可以重试。",
+    "SKILL.md is missing its frontmatter, so the description can’t be updated. Fix the file’s leading --- block and try again.": "SKILL.md 缺少 frontmatter，因此无法更新描述。请修复文件开头的 --- 块，然后重试。",
+    "Anthropic Sans": "Anthropic Sans",
+    "Cancel rename": "取消重命名",
+    "“We hit the seat cap in week two.” — Meridian, renewal call": "“第二周我们就达到席位上限了。”——Meridian，续约通话",
+    "Failed to read the device's state: No simulator with UDID {udid}": "无法读取设备状态：找不到 UDID 为 {udid} 的模拟器",
+    "Claude pressed Siri": "Claude 按下了 Siri",
+    "Only for IdPs that don’t serve a .well-known discovery document. Set together with Token URL; requires Client ID.": "仅适用于不提供 \u0060.well-known\u0060 发现文档的 IdP。请与令牌 URL 一并设置；需要客户端 ID。",
+    "Only for IdPs that don’t serve a .well-known discovery document. Set together with Authorization URL; requires Client ID.": "仅适用于不提供 \u0060.well-known\u0060 发现文档的 IdP。请与授权 URL 一并设置；需要客户端 ID。",
+    "This worktree no longer links back to its repository, usually because the folder was moved or renamed. Run git worktree repair inside the folder, then try again.": "此工作树已不再关联其仓库，通常是因为文件夹被移动或重命名。请在该文件夹中运行 git worktree repair，然后重试。",
+    "Defaults to the token URL. Okta users normally leave this empty.": "默认为令牌 URL。Okta 用户通常留空。",
+    "Enter a path like scripts/run.py.": "请输入类似 scripts/run.py 的路径。",
+    "Keep Max 20x": "保留 Max 20x",
+    "Adds offline_access to the authorize request so the IdP returns a refresh token for silent renewal.": "在授权请求中添加 offline_access，使 IdP 返回刷新令牌，以便静默续期。",
+    "Block Claude’s mobile simulator tools (iOS Simulator and Android Emulator) in Claude Code. Users can still run and operate simulators themselves.": "在 Claude Code 中阻止 Claude 使用移动端模拟器工具（iOS Simulator 和 Android Emulator）。用户仍可自行运行和操作模拟器。",
+    "roles": "角色",
+    "Couldn’t load environments. Try again.": "无法加载环境。请重试。",
+    "Coordinator model": "协调器模型",
+    "Switch to Max 5x": "切换到 Max 5x",
+    "Use this value in your AWS KMS key policy condition on kms:EncryptionContext:anthropic:compartment_uuid to restrict the key to your organization.": "在 AWS KMS 密钥策略的 kms:EncryptionContext:anthropic:compartment_uuid 条件中使用此值，将密钥限制在你的组织内。",
+    "Choose project": "选择项目",
+    "Your WorktreeCreate hook failed": "你的 WorktreeCreate 钩子执行失败",
+    "being created": "正在创建",
+    "Keep Max 5x": "保留 Max 5x",
+    "Design system": "设计系统",
+    "Choose emulator": "选择模拟器",
+    "Couldn't find \u0060adb\u0060. Install Android SDK platform-tools (or set ANDROID_HOME).": "找不到 \u0060adb\u0060。请安装 Android SDK platform-tools（或设置 ANDROID_HOME）。",
+    "Teams user": "Teams 用户",
+    "Failed to update fast mode setting. You can try again.": "更新快速模式设置失败。你可以重试。",
+    "Priya needs your take on the launch email": "Priya 需要你对发布邮件的看法",
+    "Sessions created": "已创建会话",
+    "Includes Claude Design": "包含 Claude Design",
+    "Failed to update Artifacts setting. You can try again.": "更新工件设置失败。你可以重试。",
+    "Simulator installed": "模拟器已安装",
+    "Only enable if your IdP rejects the offline_access scope on this client. Without it the app prompts for sign-in each time the token expires.": "仅当你的 IdP 拒绝此客户端的 offline_access 作用域时启用。否则，每次令牌过期时，应用都会提示你登录。",
+    "Your instructions start with a --- frontmatter block. Remove it — the name and description fields above become the frontmatter.": "你的指令以 --- frontmatter 块开头。请删除它，上方的名称和描述字段会成为 frontmatter。",
+    "I work in {role}.": "我的工作领域是 {role}。",
+    "Fast mode requires usage credits. Turn them on under <link>Usage</link>.": "快速模式需要用量额度。请在 <link>用量</link> 下开启。",
+    "Your WorktreeCreate hook didn’t complete successfully. Check the hook output in the details below and fix the hook, then send your message again.": "你的 WorktreeCreate 钩子未成功完成。请检查下方详细信息中的钩子输出，修复钩子后重新发送消息。",
+}
+
+EXACT_TRANSLATIONS.update(QUALITY_TRANSLATIONS)
+
+
 FRAGMENT_TRANSLATIONS = {
     "absolute path": "绝对路径",
     "account": "账号",

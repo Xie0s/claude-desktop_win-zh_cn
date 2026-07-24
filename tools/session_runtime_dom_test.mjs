@@ -325,6 +325,10 @@ const marker = new Element("div", { "data-y": 10, "data-height": 24 }, "最近")
 const existing = new Element("a", { href: "/chat/existing123456", "data-y": 48 }, "已有会话标题");
 aside.appendChild(marker);
 aside.appendChild(existing);
+const thirdPartyToolbar = new Element("div", { "data-y": 72 }, "JASOY · 第三方");
+const thirdPartyMenu = new Element("button", { "aria-haspopup": "menu", title: "选择提供方" });
+thirdPartyToolbar.appendChild(thirdPartyMenu);
+aside.appendChild(thirdPartyToolbar);
 const longTitle = new Element("a", { href: "/chat/longtitle123456", "data-y": 82, "data-height": 168 }, "这是一个很长很长的历史会话标题，用来模拟侧栏换行之后高度超过普通单行的真实会话");
 aside.appendChild(longTitle);
 const slashTitle = new Element("div", { "data-y": 194 }, "glos/agent-safety-kit");
@@ -387,7 +391,10 @@ body.dispatchEvent({ type: "pointerover", target: codeTab });
 flushTimers();
 body.dispatchEvent({ type: "pointerover", target: customNav });
 flushTimers();
+body.dispatchEvent({ type: "pointerover", target: thirdPartyToolbar });
+flushTimers();
 const before = existing.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
+const thirdPartyToolbarButtons = thirdPartyToolbar.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const projectButtons = project.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const longTitleButtons = longTitle.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const slashTitleButtons = slashTitle.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
@@ -418,6 +425,7 @@ const debugCounts = {
   freshInside: debugApi?.isInsideRecentsSection?.(fresh),
   freshSignal: debugApi?.hasSessionSignal?.(fresh),
   currentNewReason: debugApi?.sessionRowRejectReason?.(currentNew),
+  thirdPartyToolbarReason: debugApi?.sessionRowRejectReason?.(thirdPartyToolbar),
   longTitleReason: debugApi?.sessionRowRejectReason?.(longTitle),
   slashTitleReason: debugApi?.sessionRowRejectReason?.(slashTitle),
   filePathTitleReason: debugApi?.sessionRowRejectReason?.(filePathTitle),
@@ -430,6 +438,7 @@ const debugCounts = {
 };
 
 if (before !== 3) throw new Error(`existing session buttons=${before} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
+if (thirdPartyToolbarButtons !== 0) throw new Error(`third-party provider toolbar buttons=${thirdPartyToolbarButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (longTitleButtons !== 3) throw new Error(`long title session buttons=${longTitleButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (slashTitleButtons !== 3) throw new Error(`slash title session buttons=${slashTitleButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (nestedParentButtons !== 3) throw new Error(`nested parent session buttons=${nestedParentButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
@@ -449,4 +458,4 @@ if (!exportMarkdown.includes("Claude 回复内容")) throw new Error(`export mis
 if (!exportMarkdown.includes("新版 DOM 用户问题")) throw new Error(`export missing human markdown=${JSON.stringify(exportMarkdown)} roles=${JSON.stringify(exportRoles)}`);
 if (!exportMarkdown.includes("## 用户") || !exportMarkdown.includes("## Claude")) throw new Error(`export missing roles markdown=${JSON.stringify(exportMarkdown)} roles=${JSON.stringify(exportRoles)}`);
 
-console.log(JSON.stringify({ before, after, currentNewButtons, longTitleButtons, slashTitleButtons, nestedParentButtons, nestedChildButtons, placeholderButtons, projectButtons, filePathTitleButtons, progressButtons, filesButtons, contextButtons, modeTabButtons, customNavButtons, timelineCount, candidateCount: state.candidateCount, exportHasUser: exportMarkdown.includes("用户提出的问题"), exportHasAssistant: exportMarkdown.includes("Claude 回复内容"), exportRoles }));
+console.log(JSON.stringify({ before, after, currentNewButtons, thirdPartyToolbarButtons, longTitleButtons, slashTitleButtons, nestedParentButtons, nestedChildButtons, placeholderButtons, projectButtons, filePathTitleButtons, progressButtons, filesButtons, contextButtons, modeTabButtons, customNavButtons, timelineCount, candidateCount: state.candidateCount, exportHasUser: exportMarkdown.includes("用户提出的问题"), exportHasAssistant: exportMarkdown.includes("Claude 回复内容"), exportRoles }));

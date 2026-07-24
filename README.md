@@ -4,6 +4,31 @@
 
 旧版说明已保留为 `README.old.md`。
 
+## 便携版下载（v0.1.0）
+
+通过 [GitHub Releases](https://github.com/Jyy1529/claude-desktop_win-zh_cn/releases/tag/v0.1.0) 下载便携版 Windows 桌面助手：
+
+- [claude-desktop-zh-cn.exe](https://github.com/Jyy1529/claude-desktop_win-zh_cn/releases/download/v0.1.0/claude-desktop-zh-cn.exe)
+
+这是单文件便携程序，无需安装。Tauri 主程序、Python 桥接脚本、补丁脚本和中文资源都已编译进 EXE；首次运行会把内部运行资源释放到本机应用数据目录。双击 EXE 即可打开，移动到其他目录后仍可使用。
+
+SHA-256：
+
+```text
+901555A0883EA7DD10FA6D6B429607D7D45795830356AAB4A4E5E0AC3625A8EE
+```
+
+桌面助手提供：
+
+- 自动检测 WindowsApps 和 AppData 版 Claude Desktop。
+- 手动选择 Claude `app` 目录或安装根目录。
+- 安装中文补丁、检查更新、恢复官方文件和打开 Claude。
+- 中文与英文界面切换，语言设置会在本机保存。
+- 大海晚霞主题、手书体界面和海浪落日 Logo。
+- 运行日志、状态检查和可复制的诊断信息。
+
+运行要求：Windows 10/11、Python 3.10+、已安装 Claude Desktop。修改 WindowsApps 资源时需要管理员权限。便携版无需 Node.js、Rust 或源代码目录。
+
 ## 重要说明
 
 - 本项目不是 Anthropic 官方项目。
@@ -14,6 +39,7 @@
 
 ## 功能概览
 
+- Windows 桌面助手：React + Tauri 图形界面，统一操作安装、更新、恢复、目录选择和诊断功能。
 - 中文资源：写入桌面壳层、前端主界面和 Statsig 的 `zh-CN` 资源。
 - 硬编码文案：修补 JS chunk 中没有进入 JSON 资源的设置页、第三方推理、任务、项目和会话文案。
 - 字体面板：右侧贴边提供中文字体切换、字体名输入和本地字体导入。
@@ -23,11 +49,13 @@
 
 ## 当前验证环境
 
-- Claude Desktop：`1.14271.0.0` 已重新同步资源；支持 WindowsApps 包和 `%LOCALAPPDATA%\AnthropicClaude` 安装目录
+- Claude Desktop：`1.24012.1.0` 已验证；支持 WindowsApps 包和 `%LOCALAPPDATA%\AnthropicClaude` 安装目录
 - Windows：Windows 版 Claude Desktop
 - Python：Python 3.12 已验证；理论上 Python 3.10+ 均可使用
 - PowerShell：Windows PowerShell，安装和恢复需要管理员权限
-- 回归测试：`python -B -m pytest tools\test_patch_behaviors.py -q -p no:cacheprovider`，当前 `70 passed`
+- 前端构建：`npm run build --prefix ui`
+- Tauri 构建：`npm run build`
+- 回归测试：`python -B -m pytest tools\test_patch_behaviors.py -q -p no:cacheprovider`，当前 `79 passed`
 
 Claude Desktop 更新后仍可尝试安装；资源目录或 JS chunk 结构变化时，需要更新补丁规则。
 
@@ -58,6 +86,9 @@ py --version
 
 ## 文件结构
 
+- `ui/`：React、TypeScript 和 Vite 桌面助手界面。
+- `src-tauri/`：Tauri 2 Windows 桌面外壳、原生目录选择和便携 EXE 构建配置。
+- `tools/launcher_bridge.py`：桌面助手与现有 Python 补丁脚本之间的 UTF-8 JSON 桥接层。
 - `resources/desktop-zh-CN.json`：桌面壳层中文资源。
 - `resources/frontend-zh-CN.json`：前端主界面中文资源。
 - `resources/statsig-zh-CN.json`：Statsig 相关中文资源。

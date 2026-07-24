@@ -5,6 +5,9 @@ __pycache__/
 
 # Generated local verification output
 /output/
+/node_modules/
+/src-tauri/target/
+/src-tauri/gen/schemas/
 
 # Accidental local shell transcript
 /h origin master

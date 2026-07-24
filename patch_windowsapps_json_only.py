@@ -19,7 +19,10 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
+
+from best_effort_io import ensure_admin_for_windowsapps, print_permission_denied_hint
 
 
 ROOT = Path(__file__).resolve().parent
@@ -189,6 +192,7 @@ def copy2_best_effort(src: Path, dst: Path, *, context: str) -> bool:
             return True
         except OSError as e:
             print(f"Warning: cannot copy {context} from {src} to {dst}: {e}")
+            print_permission_denied_hint(dst)
             return False
     except OSError as e:
         print(f"Warning: cannot copy {context} from {src} to {dst}: {e}")
@@ -210,6 +214,7 @@ def write_text_best_effort(path: Path, text: str, *, context: str) -> bool:
             return True
         except OSError as e:
             print(f"Warning: cannot write {context} at {path}: {e}; skipping")
+            print_permission_denied_hint(path)
             return False
     except OSError as e:
         print(f"Warning: cannot write {context} at {path}: {e}; skipping")
@@ -429,6 +434,14 @@ def main() -> int:
 
     if not app_dir or not app_dir.exists():
         raise SystemExit("Claude app directory not found. Use --app-dir to specify manually.")
+
+    elevation_exit = ensure_admin_for_windowsapps(
+        app_dir,
+        Path(__file__).resolve(),
+        sys.argv[1:],
+    )
+    if elevation_exit is not None:
+        return elevation_exit
 
     app_resources = app_dir / "resources"
     if not app_resources.exists():

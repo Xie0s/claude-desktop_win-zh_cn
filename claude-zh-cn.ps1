@@ -16,6 +16,7 @@ function Write-OK     { param($t) Write-Host "  [OK] $t" -ForegroundColor Green 
 function Write-Warn   { param($t) Write-Host "  [!]  $t" -ForegroundColor Yellow }
 function Write-Err    { param($t) Write-Host "  [X]  $t" -ForegroundColor Red }
 function Write-Info   { param($t) Write-Host "  $t" -ForegroundColor Gray }
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ── 管理员检查 ────────────────────────────────────────────
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -23,11 +24,19 @@ $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIde
 
 if (-not $isAdmin) {
   Write-Host ''
-  Write-Err '需要以管理员身份运行此脚本。'
-  Write-Info '右键 PowerShell -> 以管理员身份运行，然后重新执行。'
-  Write-Host ''
-  Read-Host '按 Enter 退出'
-  exit 1
+  Write-Warn '检测到当前终端没有管理员权限，正在请求管理员权限...'
+  try {
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $arguments -WorkingDirectory $scriptDir | Out-Null
+    exit 0
+  } catch {
+    Write-Host ''
+    Write-Err '未获得管理员权限，补丁未执行。'
+    Write-Info '请右键 PowerShell 或 Windows Terminal，选择“以管理员身份运行”，然后重新执行。'
+    Write-Host ''
+    Read-Host '按 Enter 退出'
+    exit 1
+  }
 }
 
 # ── Python 检查 ───────────────────────────────────────────
@@ -43,7 +52,6 @@ if (-not $python) {
 }
 
 # ── 自动检测 Claude 包路径 ────────────────────────────────
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Resolve-ClaudeAppPath {
   param([string]$InputPath)
