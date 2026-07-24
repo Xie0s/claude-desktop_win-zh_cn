@@ -196,7 +196,7 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "mode-or-toolbar" in content
     assert "function looksLikeThirdPartyProviderToolbar" in content
     assert "third-party-provider-toolbar" in content
-    assert "Third[\s-]*party|Gateway" in content
+    assert r"Third[\s-]*party|Gateway" in content
     assert "href.match(/(?:chat|conversation|thread|session)(?:\\/|=|:|-)([A-Za-z0-9_.-]+)/i)" in content
     assert "href.match(/\\/([A-Za-z0-9_-]{8,})(?:[/?#]|$)/)" not in content
     assert "function hasNativeRowControl" in content
@@ -2837,6 +2837,118 @@ def test_sync_i18n_preserves_effort_slider_terms() -> None:
     assert {source: sync.translate_value(source, {}) for source in expected} == expected
 
 
+def test_sync_i18n_repairs_current_release_quality_regressions() -> None:
+    sync = load_module("sync_i18n_current_release_quality_test", ROOT / "tools" / "sync_i18n_from_installed.py")
+
+    expected = {
+        "Marketplace “{marketplaceName}” removed.": "市场“{marketplaceName}”已移除。",
+        "Issue opened": "议题已打开",
+        "Run by schedule": "按计划运行",
+        "Run by weekly schedule": "按每周计划运行",
+        "Run by daily schedule": "按每日计划运行",
+        "Try Claude Design": "试用 Claude Design",
+        "{n, plural, one {<v>#</v> tool use} other {<v>#</v> tool uses}}": "{n, plural, one {<v>#</v> 次工具调用} other {<v>#</v> 次工具调用}}",
+        "Running code…": "正在运行代码…",
+        "Add link": "添加链接",
+        "Office Agents": "Office Agents",
+        "Default app": "默认应用",
+        "Following a plan": "正在按计划执行",
+        "Claude now has a browser": "Claude 现在可以使用浏览器了",
+        "Run cancelled": "运行已取消",
+        "Cancel run": "取消运行",
+        "Connect an app": "连接应用",
+        "Add project context from “{projectName}”?": "要从“{projectName}”添加项目上下文吗？",
+        "claude://cowork/shared-artifact?uuid=…": "claude://cowork/shared-artifact?uuid=…",
+        "Marketplace sync failed.": "市场同步失败。",
+        "Could not access the marketplace archive. Check that the URL is correct and the file is publicly accessible.": "无法访问市场归档。请检查 URL 是否正确，并确认该文件可公开访问。",
+        "Computer use is on. To finish setup, grant the macOS permissions below.": "计算机操控已开启。若要完成设置，请授予下方的 macOS 权限。",
+        "Claude Design Admin": "Claude Design 管理员",
+        "Create GitHub issue": "创建 GitHub 议题",
+        "Triage new issues and flag duplicates each morning": "每天早上整理新议题并标记重复项",
+        "Scheduled scan (cancelled)": "计划扫描（已取消）",
+        "Scan (cancelled)": "扫描（已取消）",
+        "Cancelled.": "已取消。",
+        "Open on GitHub": "在 GitHub 上打开",
+        "Review a GitHub pull request": "审阅 GitHub 拉取请求",
+        "Project or folder": "项目或文件夹",
+        "Opens as a new task": "作为新任务打开",
+        "API key or token": "API 密钥或令牌",
+        "Connect a workspace": "连接工作区",
+        "Enter a domain.": "输入域名。",
+        "Scheduled a message": "已安排一条消息",
+        "Add a GitHub org": "添加 GitHub 组织",
+        "Filter sources by category": "按类别筛选来源",
+        "Opening Claude Code…": "正在打开 Claude Code…",
+        "Canceling…": "正在取消…",
+        "No one": "无人",
+        "I want to analyze an A/B test. Give me space to share the experiment setup, metrics, and data. I might have the raw data or experiment docs to upload. Follow up on anything that’s unclear, then calculate statistical significance, effect sizes, and confidence intervals, and present a clear recommendation with supporting charts.": "我想分析 A/B 测试。请留出空间让我分享实验设置、指标和数据。我可能会上传原始数据或实验文档。请追问任何不清楚的地方，然后计算统计显著性、效应量和置信区间，并用图表支撑给出明确建议。",
+        "Name A-Z": "名称 A-Z",
+        "Friends can try both Cowork and Claude Code.": "朋友可以同时试用 Cowork 和 Claude Code。",
+        "Auto-merge isn’t available in SSH sessions yet. Use gh or GitHub directly.": "SSH 会话暂不支持自动合并。请直接使用 gh 或 GitHub。",
+        "Claude for PowerPoint": "Claude for PowerPoint",
+        "Claude for Slack": "Claude for Slack",
+        "Claude Enterprise seat": "Claude Enterprise 席位",
+        "Claude Cowork": "Claude Cowork",
+        "Claude API": "Claude API",
+        "Claude Free": "Claude Free",
+        "Claude Max": "Claude Max",
+        "Claude Pro": "Claude Pro",
+        "Claude for Excel": "Claude for Excel",
+        "Take over the screen? You’ve set Background as your preferred mode, so Claude is checking before switching to full-screen control.": "要接管屏幕吗？你已将“后台”设为首选模式，因此 Claude 会在切换到全屏控制前询问。",
+        "Claude runs on its own and pauses to ask if anything looks unsafe.": "Claude 会自主运行，并在发现操作可能不安全时暂停询问。",
+        "Claude checks in when it needs your input": "Claude 在需要你输入时会向你确认",
+        "Check in when you want or just let Claude cook.": "你可以随时查看进度，也可以让 Claude 自主完成。",
+        "Let’s get cooking! Pick an artifact category or start building your idea from scratch.": "开始创作吧！选择一个工件类别，或从零开始构思。",
+        "Start cooking": "开始创作",
+        "For feedback about Claude’s responses, use the thumbs up or down buttons under any message. That feedback goes directly to the teams improving Claude.": "如需反馈 Claude 的回复，请使用消息下方的赞或踩按钮。反馈会直接发送给负责改进 Claude 的团队。",
+        "This check isn’t available right now. You can still switch to the other model.": "此检查当前不可用。你仍可切换到其他模型。",
+        "Couldn’t load checks. This view retries automatically.": "无法加载检查。此视图会自动重试。",
+        "Checks cancelled.": "检查已取消。",
+        "You’ve reached the temporary limit for these checks. Try again in a few minutes.": "这些检查已达到临时限额。请几分钟后重试。",
+        "Support provided by {helplineName}, not Claude. <link>Learn more</link>": "支持服务由 {helplineName} 提供，并非 Claude。<link>了解更多</link>",
+        "{orgName} is on Claude. Join your team to share projects and chats.": "{orgName} 已加入 Claude。加入团队即可共享项目和聊天。",
+        "Try a quick task — Claude does it, you watch": "尝试一个简单任务：由 Claude 完成，你可以查看过程",
+        "They’ll also get Claude in:": "他们还可在以下产品中使用 Claude：",
+        "Welcome! I’m Claude.": "欢迎！我是 Claude。",
+        "Let’s knock something off your list.": "先把你清单上的一件事搞定吧。",
+    }
+
+    assert {source: sync.translate_value(source, {}) for source in expected} == expected
+    assert sync.canonicalize_existing_translation(
+        "You’ve reached your {period, select, daily {daily } weekly {weekly } monthly {monthly } other {}}spend limit.",
+        "你已达到 {period, select, daily {日常的} weekly {每周} monthly {每月} other {}} 支出限额。",
+    ) == "你已达到 {period, select, daily {每日} weekly {每周} monthly {每月} other {}} 支出限额。"
+    assert sync.canonicalize_existing_translation(
+        "{count, plural, one {# session} other {# sessions}} couldn’t be deleted. Try again.",
+        "{count, plural, one {# 会议} other {# 会话}} 无法删除。再试一次。",
+    ) == "{count, plural, one {# 个会话} other {# 个会话}} 无法删除。再试一次。"
+    assert sync.canonicalize_existing_translation(
+        "Select a different model to use this feature",
+        "选择不同的型号来使用此功能",
+    ) == "选择不同的模型来使用此功能"
+    assert sync.canonicalize_existing_translation(
+        "If there are more files, check in before continuing.",
+        "如果还有更多文件，请先签入，然后再继续。",
+    ) == "如果还有更多文件，请先向我确认，再继续。"
+
+
+def test_i18n_coverage_detects_corrupt_mixed_fragments() -> None:
+    coverage = load_module("check_i18n_coverage_mixed_fragments_test", ROOT / "tools" / "check_i18n_coverage.py")
+
+    corrupt_values = [
+        "Fol低ing a plan",
+        "关ice Agents",
+        "计划扫描（取消led）",
+        "添加 to 消息",
+        "Claude://cowork/shared-工件?uuid=…",
+    ]
+    for value in corrupt_values:
+        assert coverage.classify_value(value) == "corrupt_content_translation"
+
+    assert coverage.classify_value("Claude Code 设置") is None
+    assert coverage.classify_value("claude://cowork/shared-artifact?uuid=…") is None
+
+
 def test_sync_i18n_skips_missing_installed_resource() -> None:
     sync = load_module("sync_i18n_from_installed_missing_en_test", ROOT / "tools" / "sync_i18n_from_installed.py")
 
@@ -2908,6 +3020,8 @@ def main() -> int:
         test_restore_reverts_stale_chunk_backup_translations,
         test_sync_i18n_updates_placeholders_and_keeps_technical_values,
         test_sync_i18n_preserves_effort_slider_terms,
+        test_sync_i18n_repairs_current_release_quality_regressions,
+        test_i18n_coverage_detects_corrupt_mixed_fragments,
         test_sync_i18n_skips_missing_installed_resource,
     ]
     for test in tests:

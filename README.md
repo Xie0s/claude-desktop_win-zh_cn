@@ -15,7 +15,7 @@
 SHA-256：
 
 ```text
-901555A0883EA7DD10FA6D6B429607D7D45795830356AAB4A4E5E0AC3625A8EE
+2697DAB1A7D0C61705937F19D545D6CA493D6B39780D4EDDCE3FBC0B10C68121
 ```
 
 桌面助手提供：
@@ -55,7 +55,7 @@ SHA-256：
 - PowerShell：Windows PowerShell，安装和恢复需要管理员权限
 - 前端构建：`npm run build --prefix ui`
 - Tauri 构建：`npm run build`
-- 回归测试：`python -B -m pytest tools\test_patch_behaviors.py -q -p no:cacheprovider`，当前 `79 passed`
+- 回归测试：`python -B -m pytest tools\test_patch_behaviors.py -q -p no:cacheprovider`，当前 `81 passed`
 
 Claude Desktop 更新后仍可尝试安装；资源目录或 JS chunk 结构变化时，需要更新补丁规则。
 
