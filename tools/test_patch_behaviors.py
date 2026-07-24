@@ -131,7 +131,7 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_END__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_VERSION__" in content
-    assert 'const VERSION = "42"' in content
+    assert 'const VERSION = "44"' in content
     assert "claude-zh-cn-session-delete-button" in content
     assert "claude-zh-cn-session-export-button" in content
     assert "claude-zh-cn-session-move-button" in content
@@ -200,6 +200,12 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "href.match(/(?:chat|conversation|thread|session)(?:\\/|=|:|-)([A-Za-z0-9_.-]+)/i)" in content
     assert "href.match(/\\/([A-Za-z0-9_-]{8,})(?:[/?#]|$)/)" not in content
     assert "function hasNativeRowControl" in content
+    assert "function isNearSidebarBottom" in content
+    assert "function isNearViewportSidebarBottom" in content
+    assert "function cleanupProviderToolbarActions" in content
+    assert "function looksLikeProviderIdentity" in content
+    assert "if (row?.matches?.(selector)) controls.push(row);" in content
+    assert "cleanupRejectedRows();" in content
     assert "function isLikelyProjectOrGroupRow" in content
     assert "function looksLikeNewSessionCommand" in content
     assert "return \"new-session-command\";" in content
@@ -1468,6 +1474,73 @@ def test_permission_denied_hint_is_actionable() -> None:
     assert "处理步骤" in message
 
 
+def test_windows_admin_relaunch_uses_hidden_window() -> None:
+    if os.name != "nt":
+        return
+
+    script_path = ROOT / "patch_windowsapps_json_only.py"
+    with mock.patch.object(
+        best_effort_io.ctypes.windll.shell32,
+        "ShellExecuteW",
+        return_value=33,
+    ) as shell_execute:
+        assert best_effort_io.relaunch_as_admin(script_path, ["--app-dir", "C:\\Claude\\app"])
+
+    assert shell_execute.call_args.args[-1] == 0
+
+
+def test_launcher_bridge_streams_install_progress() -> None:
+    bridge = load_module("launcher_bridge_progress_test", ROOT / "tools" / "launcher_bridge.py")
+    app_dir = Path(r"C:\Program Files\WindowsApps\Claude_test\app")
+    events: list[tuple[str, int, str]] = []
+
+    def fake_run_script(_script_name: str, _app_dir: Path, on_line=None):
+        if on_line:
+            on_line("child output")
+        return 0, "child output"
+
+    with (
+        mock.patch.object(bridge, "resolve_app_dir", return_value=app_dir),
+        mock.patch.object(bridge, "stop_claude"),
+        mock.patch.object(bridge, "run_python_script", side_effect=fake_run_script),
+        mock.patch.object(bridge, "build_status", return_value={"localized": True}),
+    ):
+        result = bridge.action_install(
+            target="windows-apps",
+            app_dir=str(app_dir),
+            progress=lambda phase, percent, message: events.append((phase, percent, message)),
+        )
+
+    phases = [phase for phase, _, _ in events]
+    percentages = [percent for _, percent, _ in events]
+    assert result["ok"] is True
+    assert phases[0] == "prepare"
+    assert "resources" in phases
+    assert "runtime" in phases
+    assert "verify" in phases
+    assert phases[-1] == "complete"
+    assert percentages[0] < percentages[-1] == 100
+
+
+def test_background_progress_contract_is_wired_across_rust_and_react() -> None:
+    rust = (ROOT / "src-tauri" / "src" / "lib.rs").read_text(encoding="utf-8")
+    api = (ROOT / "ui" / "src" / "tauriApi.ts").read_text(encoding="utf-8")
+    app = (ROOT / "ui" / "src" / "App.tsx").read_text(encoding="utf-8")
+    css = (ROOT / "ui" / "src" / "App.css").read_text(encoding="utf-8")
+
+    assert 'const BRIDGE_PROGRESS_EVENT: &str = "bridge-progress"' in rust
+    assert "fn start_action(" in rust
+    assert "std::thread::spawn" in rust
+    assert "Stdio::piped()" in rust
+    assert "command.creation_flags(0x0800_0000)" in rust
+    assert "listen<ActionProgress>('bridge-progress'" in api
+    assert "apiRef.current.runAction" in app
+    assert 'role="progressbar"' in app
+    assert ".app-shell svg { flex: 0 0 auto; }" in css
+    assert "max-width: 1760px" in css
+    assert "clamp(320px, 25vw, 430px)" in css
+
+
 def test_noninteractive_scripts_support_app_dir() -> None:
     install = (ROOT / "install-windowsapps-json-only.ps1").read_text(encoding="utf-8-sig")
     restore = (ROOT / "restore-windowsapps-zh-cn.ps1").read_text(encoding="utf-8-sig")
@@ -2109,7 +2182,7 @@ def test_assets_tree_injects_session_tools_runtime() -> None:
     assert "claude-zh-cn-session-delete-button" in content
     assert "claude-zh-cn-session-export-button" in content
     assert "claude-zh-cn-conversation-timeline" in content
-    assert 'const VERSION = "42"' in content
+    assert 'const VERSION = "44"' in content
 
 
 def test_chunk_patch_translates_custom_label() -> None:
@@ -3006,6 +3079,9 @@ def main() -> int:
         test_windowsapps_admin_gate_relaunches_when_not_admin,
         test_windowsapps_admin_gate_reports_declined_uac,
         test_permission_denied_hint_is_actionable,
+        test_windows_admin_relaunch_uses_hidden_window,
+        test_launcher_bridge_streams_install_progress,
+        test_background_progress_contract_is_wired_across_rust_and_react,
         test_noninteractive_scripts_support_app_dir,
         test_powershell_status_distinguishes_cleanup_states,
         test_powershell_default_status_uses_targeted_chunk_checks,

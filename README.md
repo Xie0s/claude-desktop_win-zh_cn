@@ -15,7 +15,7 @@
 SHA-256：
 
 ```text
-2697DAB1A7D0C61705937F19D545D6CA493D6B39780D4EDDCE3FBC0B10C68121
+32D60002E86CFBAE1C4F0DC8DAE0BB2390786D8A37AC089048562469652BE20A
 ```
 
 桌面助手提供：
@@ -23,6 +23,7 @@ SHA-256：
 - 自动检测 WindowsApps 和 AppData 版 Claude Desktop。
 - 手动选择 Claude `app` 目录或安装根目录。
 - 安装中文补丁、检查更新、恢复官方文件和打开 Claude。
+- 安装、恢复、更新和启动操作在后台执行，前台显示阶段进度、实时日志，窗口可以继续移动和缩放。
 - 中文与英文界面切换，语言设置会在本机保存。
 - 大海晚霞主题、手书体界面和海浪落日 Logo。
 - 运行日志、状态检查和可复制的诊断信息。
@@ -55,7 +56,7 @@ SHA-256：
 - PowerShell：Windows PowerShell，安装和恢复需要管理员权限
 - 前端构建：`npm run build --prefix ui`
 - Tauri 构建：`npm run build`
-- 回归测试：`python -B -m pytest tools\test_patch_behaviors.py -q -p no:cacheprovider`，当前 `81 passed`
+- 回归测试：`python -B -m pytest tools\test_patch_behaviors.py -q -p no:cacheprovider`，当前 `84 passed`
 
 Claude Desktop 更新后仍可尝试安装；资源目录或 JS chunk 结构变化时，需要更新补丁规则。
 

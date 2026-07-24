@@ -1,8 +1,9 @@
 .app-shell {
-  width: min(1280px, 100%);
+  width: 100%;
+  max-width: 1760px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 26px 30px 42px;
+  padding: 22px clamp(18px, 2vw, 34px) 38px;
   color: var(--ink);
 }
 
@@ -46,11 +47,13 @@ button:hover:not(:disabled) { border-color: var(--border-strong); transform: tra
 
 button:active:not(:disabled) { transform: translateY(0) scale(0.985); }
 
-button:disabled, select:disabled { cursor: not-allowed; opacity: 0.52; }
+button:disabled, select:disabled, input:disabled { cursor: not-allowed; opacity: 0.68; }
+
+.app-shell svg { flex: 0 0 auto; }
 
 .ghost-button { min-height: 38px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; background: transparent; font-size: 13px; font-weight: 700; }
 
-.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 350px; gap: 18px; align-items: start; padding-top: 20px; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 25vw, 430px); gap: clamp(14px, 1.25vw, 20px); align-items: start; padding-top: 20px; }
 
 .main-panel, .side-card { border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-card); }
 
@@ -119,6 +122,35 @@ h2 { font-size: 17px; font-weight: 800; line-height: 1.25; }
 .action-hint { margin-top: 9px; padding-left: 2px; color: var(--ink-muted); font-size: 12px; line-height: 1.5; }
 .action-hint.good { color: var(--success); }
 .action-hint.warn { color: var(--warning); }
+
+.progress-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(47, 126, 135, 0.25);
+  border-radius: 10px;
+  background: rgba(227, 240, 238, 0.82);
+}
+
+.progress-panel.complete { border-color: rgba(36, 116, 102, 0.28); background: rgba(221, 239, 232, 0.82); }
+.progress-panel.failed { border-color: rgba(173, 69, 66, 0.28); background: rgba(246, 222, 220, 0.82); }
+.progress-heading, .progress-title, .progress-detail { display: flex; align-items: center; }
+.progress-heading { justify-content: space-between; gap: 16px; }
+.progress-title { min-width: 0; gap: 10px; }
+.progress-title > svg { color: var(--sea); }
+.progress-panel.complete .progress-title > svg { color: var(--success); }
+.progress-panel.failed .progress-title > svg { color: var(--danger); }
+.progress-title > div { min-width: 0; display: grid; gap: 2px; }
+.progress-title span { color: var(--ink-muted); font-size: 11px; }
+.progress-title strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.progress-percent { flex: 0 0 auto; color: var(--sea-deep); font-family: "Cascadia Mono", "Consolas", monospace; font-size: 13px; font-weight: 800; }
+.progress-track { height: 9px; overflow: hidden; border: 1px solid rgba(23, 63, 72, 0.16); border-radius: 999px; background: rgba(255, 255, 255, 0.58); }
+.progress-track > span { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, var(--sea), var(--accent), var(--sun)); transition: width 280ms ease; }
+.progress-panel.failed .progress-track > span { background: var(--danger); }
+.progress-detail { min-width: 0; justify-content: space-between; gap: 14px; }
+.progress-detail > span { min-width: 0; overflow: hidden; color: var(--ink-soft); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.progress-detail small { flex: 0 1 auto; color: var(--ink-muted); font-size: 10px; text-align: right; }
 
 .log-panel { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); }
 
@@ -211,7 +243,8 @@ summary { color: var(--ink-muted); font-size: 11px; cursor: pointer; }
 
 /* Ocean sunset visual system */
 .app-shell {
-  width: min(1320px, 100%);
+  width: 100%;
+  max-width: 1760px;
   padding-top: 20px;
 }
 
@@ -270,9 +303,9 @@ summary { color: var(--ink-muted); font-size: 11px; cursor: pointer; }
 .ghost-button { color: var(--sea-deep); background: rgba(247, 227, 223, 0.66); }
 
 .workspace {
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 25vw, 430px);
   align-items: stretch;
-  gap: 20px;
+  gap: clamp(14px, 1.25vw, 20px);
 }
 
 .main-panel,
@@ -408,4 +441,6 @@ html[lang="en-US"] input { font-family: "Segoe Print", "Bradley Hand", "Comic Sa
   h1 { font-size: 36px; }
   .manual-directory-row { grid-template-columns: 1fr; }
   .browse-button { width: 100%; }
+  .progress-detail { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .progress-detail small { text-align: left; }
 }

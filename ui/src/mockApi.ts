@@ -1,4 +1,13 @@
-import type { ActionResult, InstallTarget, LauncherApi, LiveLog, PatchStatus } from './types'
+import type {
+  ActionCommand,
+  ActionProgress,
+  ActionResult,
+  InstallTarget,
+  LauncherApi,
+  LiveLog,
+  PatchStatus,
+  ProgressHandler,
+} from './types'
 
 const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 
@@ -48,12 +57,69 @@ function writeLog(lines: string[]) {
   lastLog = lines.join('\n')
 }
 
+function mockProgress(
+  command: Exclude<ActionCommand, 'refresh'>,
+  phase: string,
+  progress: number,
+  message: string,
+): ActionProgress {
+  return { type: 'progress', action: command, phase, progress, message, log: message, done: false }
+}
+
 export const PREVIEW_STATUS = buildStatus()
 
 export const mockApi: LauncherApi = {
   async getStatus(target: InstallTarget = 'auto', appDir?: string) {
     await wait(420)
     return buildStatus(target, appDir)
+  },
+
+  async runAction(
+    command: Exclude<ActionCommand, 'refresh'>,
+    target: InstallTarget,
+    appDir?: string,
+    onProgress: ProgressHandler = () => undefined,
+  ): Promise<ActionResult> {
+    const phases = command === 'install'
+      ? [
+          mockProgress(command, 'prepare', 5, '[准备] 正在定位 Claude Desktop...'),
+          mockProgress(command, 'stop', 20, '[准备] 正在关闭 Claude Desktop...'),
+          mockProgress(command, 'resources', 42, '[资源] 正在写入 zh-CN JSON 资源...'),
+          mockProgress(command, 'runtime', 72, '[运行时] 正在写入 chunk 文案、字体和会话增强...'),
+          mockProgress(command, 'verify', 92, '[校验] 正在检查中文资源和语言白名单...'),
+        ]
+      : command === 'restore'
+        ? [
+            mockProgress(command, 'prepare', 8, '[准备] 正在定位 Claude Desktop...'),
+            mockProgress(command, 'stop', 28, '[准备] 正在关闭 Claude Desktop...'),
+            mockProgress(command, 'restore', 72, '[恢复] 正在从官方备份恢复资源...'),
+          ]
+        : [mockProgress(command, command === 'open' ? 'open' : 'update', 45, `[执行] ${targetLabel[target]}...`)]
+
+    for (const phase of phases) {
+      onProgress(phase)
+      await wait(160)
+    }
+
+    const result = command === 'install'
+      ? await mockApi.install(target, appDir)
+      : command === 'restore'
+        ? await mockApi.restore(target, appDir)
+        : command === 'open'
+          ? await mockApi.open(target, appDir)
+          : await mockApi.checkUpdate(target, appDir)
+    onProgress({
+      type: 'result',
+      action: command,
+      phase: result.ok ? 'complete' : 'error',
+      progress: 100,
+      message: result.message,
+      log: result.log,
+      done: true,
+      ok: result.ok,
+      result,
+    })
+    return result
   },
 
   async install(target, appDir) {

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 BACKUP_ROOT = Path(os.environ.get("LOCALAPPDATA", "")) / "Claude-zh-CN-official-backup"
 CONFIG_PATH = Path(os.environ.get("APPDATA", "")) / "Claude" / "config.json"
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+STREAM_PROGRESS = False
+ProgressCallback = Callable[[str, int, str], None]
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -23,9 +27,24 @@ if hasattr(sys.stderr, "reconfigure"):
 
 
 def emit(payload: dict[str, Any], exit_code: int = 0) -> int:
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False))
+    output = {"type": "result", "result": payload} if STREAM_PROGRESS else payload
+    sys.stdout.write(json.dumps(output, ensure_ascii=False) + "\n")
     sys.stdout.flush()
     return exit_code
+
+
+def emit_progress(phase: str, progress: int, message: str) -> None:
+    if not STREAM_PROGRESS:
+        return
+    payload = {
+        "type": "progress",
+        "phase": phase,
+        "progress": max(0, min(100, progress)),
+        "message": message,
+        "log": message,
+    }
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
 
 
 def run_capture(command: list[str], *, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
@@ -42,6 +61,7 @@ def run_capture(command: list[str], *, timeout: float | None = None) -> subproce
         env=child_env,
         timeout=timeout,
         shell=False,
+        creationflags=CREATE_NO_WINDOW,
     )
 
 
@@ -347,35 +367,84 @@ def open_claude(app_dir: Path | None) -> tuple[bool, str]:
     return False, "未找到 Claude.exe，无法打开。"
 
 
-def run_python_script(script_name: str, app_dir: Path | None) -> tuple[int, str]:
+def run_python_script(
+    script_name: str,
+    app_dir: Path | None,
+    on_line: Callable[[str], None] | None = None,
+) -> tuple[int, str]:
     command = [python_exe(), "-B", str(ROOT / script_name)]
     if app_dir:
         command.extend(["--app-dir", str(app_dir)])
-    result = run_capture(command, timeout=None)
-    output = (result.stdout or "") + (("\n" + result.stderr) if result.stderr else "")
-    return result.returncode, output.strip()
+    if on_line is None:
+        result = run_capture(command, timeout=None)
+        output = (result.stdout or "") + (("\n" + result.stderr) if result.stderr else "")
+        return result.returncode, output.strip()
+
+    child_env = os.environ.copy()
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    process = subprocess.Popen(
+        command,
+        cwd=str(ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=child_env,
+        shell=False,
+        bufsize=1,
+        creationflags=CREATE_NO_WINDOW,
+    )
+    output_lines: list[str] = []
+    if process.stdout is not None:
+        for raw_line in process.stdout:
+            line = raw_line.rstrip("\r\n")
+            if not line:
+                continue
+            output_lines.append(line)
+            on_line(line)
+    return process.wait(), "\n".join(output_lines)
 
 
-def action_install(target: str | None = None, app_dir: str | None = None) -> dict[str, Any]:
-    lines = ["[准备] 正在定位 Claude Desktop..."]
+def action_install(
+    target: str | None = None,
+    app_dir: str | None = None,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    lines: list[str] = []
+
+    def step(phase: str, percent: int, message: str) -> None:
+        lines.append(message)
+        if progress:
+            progress(phase, percent, message)
+
+    step("prepare", 4, "[准备] 正在定位 Claude Desktop...")
     resolved = resolve_app_dir(target=target, app_dir=app_dir)
     if not resolved:
+        step("error", 100, "[错误] 未找到可写入的 Claude app 目录。")
         return {
             "ok": False,
             "state": "missing",
             "message": "未找到 Claude Desktop 安装。",
-            "log": "\n".join(lines + ["[错误] 未找到可写入的 Claude app 目录。"]),
+            "log": "\n".join(lines),
         }
 
-    lines.append(f"[检测] 安装路径: {resolved}")
-    lines.append("[准备] 正在关闭 Claude Desktop...")
+    step("detect", 12, f"[检测] 安装路径: {resolved}")
+    step("stop", 20, "[准备] 正在关闭 Claude Desktop...")
     stop_claude()
 
-    lines.append("[资源] 正在写入 zh-CN JSON 资源...")
-    code, out = run_python_script("patch_windowsapps_json_only.py", resolved)
+    step("resources", 28, "[资源] 正在写入 zh-CN JSON 资源...")
+    code, out = run_python_script(
+        "patch_windowsapps_json_only.py",
+        resolved,
+        on_line=(lambda line: progress("resources", 40, line)) if progress else None,
+    )
     if out:
         lines.extend(out.splitlines())
     if code != 0:
+        if progress:
+            progress("error", 100, "[错误] JSON 资源补丁失败。")
         return {
             "ok": False,
             "state": "error",
@@ -383,11 +452,17 @@ def action_install(target: str | None = None, app_dir: str | None = None) -> dic
             "log": "\n".join(lines),
         }
 
-    lines.append("[运行时] 正在写入 chunk 文案、字体和会话增强...")
-    code, out = run_python_script("patch_chunks_zh_cn.py", resolved)
+    step("runtime", 56, "[运行时] 正在写入 chunk 文案、字体和会话增强...")
+    code, out = run_python_script(
+        "patch_chunks_zh_cn.py",
+        resolved,
+        on_line=(lambda line: progress("runtime", 74, line)) if progress else None,
+    )
     if out:
         lines.extend(out.splitlines())
     if code != 0:
+        if progress:
+            progress("error", 100, "[错误] chunk 补丁失败。")
         return {
             "ok": False,
             "state": "error",
@@ -395,9 +470,10 @@ def action_install(target: str | None = None, app_dir: str | None = None) -> dic
             "log": "\n".join(lines),
         }
 
+    step("verify", 92, "[校验] 正在检查中文资源和语言白名单...")
     status = build_status(target=target, app_dir=str(resolved))
     if not status["localized"]:
-        lines.append("[校验] 安装后校验未通过，请查看上方输出。")
+        step("error", 100, "[校验] 安装后校验未通过，请查看上方输出。")
         return {
             "ok": False,
             "state": "repair",
@@ -405,7 +481,7 @@ def action_install(target: str | None = None, app_dir: str | None = None) -> dic
             "log": "\n".join(lines),
         }
 
-    lines.append("[完成] 中文补丁已安装。")
+    step("complete", 100, "[完成] 中文补丁已安装。")
     return {
         "ok": True,
         "state": "ready",
@@ -414,25 +490,43 @@ def action_install(target: str | None = None, app_dir: str | None = None) -> dic
     }
 
 
-def action_restore(target: str | None = None, app_dir: str | None = None) -> dict[str, Any]:
-    lines = ["[准备] 正在定位 Claude Desktop..."]
+def action_restore(
+    target: str | None = None,
+    app_dir: str | None = None,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    lines: list[str] = []
+
+    def step(phase: str, percent: int, message: str) -> None:
+        lines.append(message)
+        if progress:
+            progress(phase, percent, message)
+
+    step("prepare", 5, "[准备] 正在定位 Claude Desktop...")
     resolved = resolve_app_dir(target=target, app_dir=app_dir)
     if not resolved:
+        step("error", 100, "[错误] 未找到可恢复的 Claude app 目录。")
         return {
             "ok": False,
             "state": "missing",
             "message": "未找到 Claude Desktop 安装。",
-            "log": "\n".join(lines + ["[错误] 未找到可恢复的 Claude app 目录。"]),
+            "log": "\n".join(lines),
         }
 
-    lines.append(f"[检测] 安装路径: {resolved}")
-    lines.append("[准备] 正在关闭 Claude Desktop...")
+    step("detect", 15, f"[检测] 安装路径: {resolved}")
+    step("stop", 28, "[准备] 正在关闭 Claude Desktop...")
     stop_claude()
-    lines.append("[恢复] 正在从官方备份恢复资源...")
-    code, out = run_python_script("restore_claude_zh_cn_windowsapps.py", resolved)
+    step("restore", 42, "[恢复] 正在从官方备份恢复资源...")
+    code, out = run_python_script(
+        "restore_claude_zh_cn_windowsapps.py",
+        resolved,
+        on_line=(lambda line: progress("restore", 72, line)) if progress else None,
+    )
     if out:
         lines.extend(out.splitlines())
     if code != 0:
+        if progress:
+            progress("error", 100, "[错误] 恢复失败。")
         return {
             "ok": False,
             "state": "error",
@@ -440,7 +534,7 @@ def action_restore(target: str | None = None, app_dir: str | None = None) -> dic
             "log": "\n".join(lines),
         }
 
-    lines.append("[完成] 已恢复原样，Claude 数据保持不变。")
+    step("complete", 100, "[完成] 已恢复原样，Claude 数据保持不变。")
     return {
         "ok": True,
         "state": "repair",
@@ -449,9 +543,17 @@ def action_restore(target: str | None = None, app_dir: str | None = None) -> dic
     }
 
 
-def action_open(target: str | None = None, app_dir: str | None = None) -> dict[str, Any]:
+def action_open(
+    target: str | None = None,
+    app_dir: str | None = None,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    if progress:
+        progress("open", 35, "[启动] 正在打开 Claude Desktop...")
     resolved = resolve_app_dir(target=target, app_dir=app_dir)
     ok, detail = open_claude(resolved)
+    if progress:
+        progress("complete" if ok else "error", 100, f"[启动] {detail}")
     return {
         "ok": ok,
         "state": "ready" if ok else "error",
@@ -460,7 +562,13 @@ def action_open(target: str | None = None, app_dir: str | None = None) -> dict[s
     }
 
 
-def action_check_update(target: str | None = None, app_dir: str | None = None) -> dict[str, Any]:
+def action_check_update(
+    target: str | None = None,
+    app_dir: str | None = None,
+    progress: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    if progress:
+        progress("update", 20, "[更新] 正在读取当前 Claude Desktop 版本...")
     status = build_status(target=target, app_dir=app_dir)
     log = [
         "[更新] 正在读取当前 Claude Desktop 版本...",
@@ -468,6 +576,8 @@ def action_check_update(target: str | None = None, app_dir: str | None = None) -
         f"[更新] 安装路径: {status['installPath']}",
         "[更新] 当前已是可用版本；Claude 官方更新后请重新安装补丁。",
     ]
+    if progress:
+        progress("complete", 100, log[-1])
     return {
         "ok": True,
         "state": status["state"],
@@ -477,23 +587,28 @@ def action_check_update(target: str | None = None, app_dir: str | None = None) -
 
 
 def main(argv: list[str] | None = None) -> int:
+    global STREAM_PROGRESS
+
     parser = argparse.ArgumentParser(description="Claude Desktop zh-CN launcher bridge")
     parser.add_argument("command", choices=["status", "install", "restore", "open", "check-update"])
     parser.add_argument("--target", default="auto")
     parser.add_argument("--app-dir", default=None)
+    parser.add_argument("--stream", action="store_true")
     args = parser.parse_args(argv)
+    STREAM_PROGRESS = args.stream
+    progress = emit_progress if args.stream else None
 
     try:
         if args.command == "status":
             return emit({"ok": True, "status": build_status(target=args.target, app_dir=args.app_dir)})
         if args.command == "install":
-            return emit(action_install(target=args.target, app_dir=args.app_dir))
+            return emit(action_install(target=args.target, app_dir=args.app_dir, progress=progress))
         if args.command == "restore":
-            return emit(action_restore(target=args.target, app_dir=args.app_dir))
+            return emit(action_restore(target=args.target, app_dir=args.app_dir, progress=progress))
         if args.command == "open":
-            return emit(action_open(target=args.target, app_dir=args.app_dir))
+            return emit(action_open(target=args.target, app_dir=args.app_dir, progress=progress))
         if args.command == "check-update":
-            return emit(action_check_update(target=args.target, app_dir=args.app_dir))
+            return emit(action_check_update(target=args.target, app_dir=args.app_dir, progress=progress))
     except Exception as exc:
         return emit(
             {

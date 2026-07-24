@@ -44,7 +44,7 @@ def relaunch_as_admin(script_path: Path, script_args: Sequence[str]) -> bool:
             sys.executable,
             parameters,
             str(script_path.parent),
-            1,
+            0,
         )
     except (AttributeError, OSError):
         return False

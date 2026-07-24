@@ -31,6 +31,21 @@ export type ActionResult = {
   log: string
 }
 
+export type ActionProgress = {
+  type: 'progress' | 'result'
+  jobId?: string
+  action?: Exclude<ActionCommand, 'refresh'>
+  phase: string
+  progress: number
+  message: string
+  log?: string
+  done?: boolean
+  ok?: boolean
+  result?: ActionResult
+}
+
+export type ProgressHandler = (progress: ActionProgress) => void
+
 export type LiveLog = {
   title: string
   content: string
@@ -48,6 +63,7 @@ export type Activity = {
 
 export interface LauncherApi {
   getStatus(target?: InstallTarget, appDir?: string): Promise<PatchStatus>
+  runAction(command: Exclude<ActionCommand, 'refresh'>, target: InstallTarget, appDir?: string, onProgress?: ProgressHandler): Promise<ActionResult>
   install(target: InstallTarget, appDir?: string): Promise<ActionResult>
   restore(target?: InstallTarget, appDir?: string): Promise<ActionResult>
   open(target?: InstallTarget, appDir?: string): Promise<ActionResult>

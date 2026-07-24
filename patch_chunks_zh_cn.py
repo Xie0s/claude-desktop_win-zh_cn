@@ -507,7 +507,7 @@ svg text, svg tspan {{
 def session_delete_inject_script() -> str:
     body = r'''
 ;(()=>{
-  const VERSION = "42";
+  const VERSION = "44";
   try {
   if (globalThis.__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_VERSION__ === VERSION) return;
   globalThis.__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__ = true;
@@ -1094,6 +1094,13 @@ def session_delete_inject_script() -> str:
     return false;
   }
 
+  function looksLikeProviderIdentity(value) {
+    const normalized = stripInjectedActionText(value)
+      .replace(/\s+/g, " ")
+      .trim();
+    return /(?:^|\s)[^·•\r\n]{1,100}\s*[·•]\s*(?:第三方|Third[\s-]*party|Gateway)/i.test(normalized);
+  }
+
   function looksLikeThirdPartyProviderToolbar(row, text) {
     if (rowId(row) || looksLikeChatHref(rowHref(row))) return false;
     const value = stripInjectedActionText([
@@ -1101,10 +1108,57 @@ def session_delete_inject_script() -> str:
       row.getAttribute?.("title"),
       text || rowVisibleText(row)
     ].filter(Boolean).join(" ")).replace(/\s+/g, " ").trim();
-    if (!/^[^·•]{1,80}\s*[·•]\s*(?:第三方|Third[\s-]*party|Gateway)\s*$/i.test(value)) return false;
+    if (!looksLikeProviderIdentity(value)) return false;
     return hasNativeRowControl(row)
       || row.matches?.("[role='heading']")
-      || !!row.querySelector?.("[aria-haspopup],[data-radix-menu-trigger]");
+      || !!row.querySelector?.("[aria-haspopup],[data-radix-menu-trigger]")
+      || isNearSidebarBottom(row);
+  }
+
+  function isNearSidebarBottom(row) {
+    const panel = row?.closest?.(SIDEBAR_CONTAINER_SELECTORS);
+    const rowRect = row?.getBoundingClientRect?.();
+    const panelRect = panel?.getBoundingClientRect?.();
+    if (rowRect && panelRect && panelRect.height >= 180) {
+      const footerBand = Math.min(180, Math.max(88, panelRect.height * 0.18));
+      if (rowRect.top >= panelRect.bottom - footerBand
+        && rowRect.bottom <= panelRect.bottom + 56) return true;
+    }
+    return isNearViewportSidebarBottom(row);
+  }
+
+  function isNearViewportSidebarBottom(row) {
+    const rowRect = row?.getBoundingClientRect?.();
+    const viewportHeight = Math.max(
+      Number(window.innerHeight) || 0,
+      Number(document.documentElement?.clientHeight) || 0
+    );
+    const viewportWidth = Math.max(
+      Number(window.innerWidth) || 0,
+      Number(document.documentElement?.clientWidth) || 0
+    );
+    if (!rowRect || viewportHeight < 240 || viewportWidth < 480) return false;
+    if (rowRect.width > 620) return false;
+    const footerBand = Math.min(220, Math.max(96, viewportHeight * 0.22));
+    const sidebarBoundary = Math.max(560, viewportWidth * 0.45);
+    return rowRect.left <= sidebarBoundary
+      && rowRect.bottom >= viewportHeight - footerBand
+      && rowRect.top <= viewportHeight + 48;
+  }
+
+  function providerToolbarAncestor(row) {
+    for (let current = row; current && current !== document.body; current = current.parentElement) {
+      if (rowId(current) || looksLikeChatHref(rowHref(current))) continue;
+      const value = [
+        current.getAttribute?.("aria-label"),
+        current.getAttribute?.("title"),
+        rowVisibleText(current)
+      ].filter(Boolean).join(" ");
+      if (looksLikeProviderIdentity(value) && looksLikeThirdPartyProviderToolbar(current, rowVisibleText(current))) {
+        return current;
+      }
+    }
+    return null;
   }
 
   function hasRecentsSectionHint(panel) {
@@ -1228,7 +1282,11 @@ def session_delete_inject_script() -> str:
   }
 
   function hasNativeRowControl(row) {
-    return [...row.querySelectorAll?.("button,[role='button'],[aria-haspopup],[data-radix-menu-trigger]") || []]
+    const selector = "button,[role='button'],[aria-haspopup],[data-radix-menu-trigger]";
+    const controls = [];
+    if (row?.matches?.(selector)) controls.push(row);
+    controls.push(...(row?.querySelectorAll?.(selector) || []));
+    return controls
       .some((node) => !node.classList?.contains(ACTION_BUTTON_CLASS));
   }
 
@@ -1485,7 +1543,7 @@ def session_delete_inject_script() -> str:
     const isCurrentConversation = isCurrentRecentsItem(row, text);
     const hasConversationSignal = hasSessionSignal(row) || isCurrentConversation;
     if (isBlankOrStatusDotRow(row, text)) return "blank-or-dot";
-    if (looksLikeThirdPartyProviderToolbar(row, text)) return "third-party-provider-toolbar";
+    if (looksLikeThirdPartyProviderToolbar(row, text) || providerToolbarAncestor(row)) return "third-party-provider-toolbar";
     if (looksLikeModeOrToolbarChrome(row, text)) return "mode-or-toolbar";
     if (looksLikeNewSessionCommand(row, text)) return "new-session-command";
     if (!hasConversationSignal && looksLikeSidebarChrome(row, text)) return "sidebar-chrome";
@@ -2314,6 +2372,29 @@ def session_delete_inject_script() -> str:
     });
   }
 
+  function detachRow(row) {
+    if (!row) return;
+    row.removeAttribute(ROW_FLAG);
+    removeDirectActionButtons(row);
+    if (activeRow === row) cleanupPortalButton();
+  }
+
+  function cleanupProviderToolbarActions() {
+    const handled = new Set();
+    document.querySelectorAll(`.${ACTION_BUTTON_CLASS}`).forEach((button) => {
+      if (button.classList?.contains(PORTAL_BUTTON_CLASS)) return;
+      const owner = providerToolbarAncestor(button.parentElement || button);
+      if (!owner || handled.has(owner)) return;
+      handled.add(owner);
+      document.querySelectorAll(`.${ACTION_BUTTON_CLASS}`).forEach((candidate) => {
+        if (candidate.classList?.contains(PORTAL_BUTTON_CLASS)) return;
+        if (owner.contains?.(candidate)) candidate.remove();
+      });
+      owner.removeAttribute(ROW_FLAG);
+      if (activeRow === owner) cleanupPortalButton();
+    });
+  }
+
   function attachRow(row) {
     if (!looksLikeSidebarSessionRow(row)) return;
     if (attachedAncestorActionRow(row)) {
@@ -2334,8 +2415,7 @@ def session_delete_inject_script() -> str:
   function cleanupRejectedRows() {
     document.querySelectorAll(`[${ROW_FLAG}="true"]`).forEach((row) => {
       if (looksLikeSidebarSessionRow(row)) return;
-      row.removeAttribute(ROW_FLAG);
-      removeDirectActionButtons(row);
+      detachRow(row);
     });
   }
 
@@ -2678,6 +2758,7 @@ def session_delete_inject_script() -> str:
       installStyle();
       cleanupPortalButton();
       ensureCenteredLayoutToggle();
+      cleanupProviderToolbarActions();
       cleanupRejectedRows();
       const rows = candidateRows();
       rows.forEach(attachRow);
@@ -2863,10 +2944,18 @@ def session_delete_inject_script() -> str:
     pointerAttachTarget = null;
     if (!target || target.nodeType !== 1 || isInjectedRuntimeNode(target) || !nodeTouchesSidebar(target)) return;
     const row = normalizeRecentsRow(recentsRowContainer(target));
-    if (row === lastPointerAttachRow && row.getAttribute?.(ROW_FLAG) === "true" && directActionButtons(row).length) return;
+    if (row === lastPointerAttachRow
+      && row.getAttribute?.(ROW_FLAG) === "true"
+      && directActionButtons(row).length
+      && looksLikeSidebarSessionRow(row)) return;
     lastPointerAttachRow = row;
+    if (!looksLikeSidebarSessionRow(row)) {
+      cleanupProviderToolbarActions();
+      detachRow(row);
+      return;
+    }
     if (looksLikeModeOrToolbarChrome(row, rowVisibleText(row))) return;
-    if (looksLikeSidebarSessionRow(row)) attachRow(row);
+    attachRow(row);
   }
 
   function handleSidebarPointer(event) {
@@ -2879,6 +2968,8 @@ def session_delete_inject_script() -> str:
 
   function start() {
     installStyle();
+    cleanupProviderToolbarActions();
+    cleanupRejectedRows();
     ensureCenteredLayoutToggle();
     scheduleScan(STARTUP_SCAN_DELAY_MS);
     scheduleTimelineRender(STARTUP_TIMELINE_DELAY_MS);

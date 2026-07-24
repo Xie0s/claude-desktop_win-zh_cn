@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { translations, type UiCopy, type UiLocale } from './i18n'
 import { mockApi, PREVIEW_STATUS } from './mockApi'
 import { isTauriRuntime, selectClaudeDirectory, tauriApi } from './tauriApi'
-import type { ActionCommand, Activity, CheckTone, InstallTarget, LauncherApi, LiveLog, PatchStatus } from './types'
+import type { ActionCommand, ActionProgress, Activity, CheckTone, InstallTarget, LauncherApi, LiveLog, PatchStatus } from './types'
 import './App.css'
 
 function toneIcon(tone: CheckTone) {
@@ -81,6 +81,25 @@ function translateCheckText(value: string, copy: UiCopy) {
   return known[value] ?? value
 }
 
+function progressPhaseLabel(phase: string, copy: UiCopy) {
+  const labels: Record<string, string> = {
+    starting: copy.progressStarting,
+    prepare: copy.progressPrepare,
+    detect: copy.progressDetect,
+    stop: copy.progressStop,
+    resources: copy.progressResources,
+    runtime: copy.progressRuntime,
+    verify: copy.progressVerify,
+    restore: copy.progressRestore,
+    open: copy.progressOpen,
+    update: copy.progressUpdate,
+    complete: copy.progressComplete,
+    error: copy.progressError,
+    output: copy.progressOutput,
+  }
+  return labels[phase] ?? copy.progressOutput
+}
+
 function storedLocale(): UiLocale {
   return window.localStorage.getItem('claude-zh-ui-locale') === 'en-US' ? 'en-US' : 'zh-CN'
 }
@@ -93,6 +112,7 @@ function App() {
   const [target, setTarget] = useState<InstallTarget>('auto')
   const [manualAppDir, setManualAppDir] = useState('')
   const [busyAction, setBusyAction] = useState<ActionCommand | null>(null)
+  const [actionProgress, setActionProgress] = useState<ActionProgress | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
   const [liveLog, setLiveLog] = useState<LiveLog>({
     title: copy.operationLog,
@@ -102,6 +122,7 @@ function App() {
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const nextActivityId = useRef(1)
+  const streamedLogLines = useRef<string[]>([])
 
   const targetOptions = [
     { value: 'auto' as const, label: copy.targetAuto, note: copy.targetAutoNote },
@@ -139,6 +160,8 @@ function App() {
     () => translatedActivityText(liveLog.content, copy),
     [copy, liveLog.content],
   )
+  const progressPercent = Math.max(0, Math.min(100, Math.round(actionProgress?.progress ?? 0)))
+  const progressLabel = progressPhaseLabel(actionProgress?.phase ?? 'starting', copy)
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -219,13 +242,32 @@ function App() {
     setBusyAction(command)
     const actionName = actionLabels[command]
     const logTitle = locale === 'zh-CN' ? `${actionName}日志` : `${actionName} log`
-    setLiveLog({ title: logTitle, content: `[${copy.startPrefix}] ${actionName}...`, updatedAt: timeLabel(locale) })
+    const initialLog = `[${copy.startPrefix}] ${actionName}...`
+    streamedLogLines.current = [initialLog]
+    setActionProgress({
+      type: 'progress',
+      action: command,
+      phase: 'starting',
+      progress: 0,
+      message: copy.progressStarting,
+      log: initialLog,
+      done: false,
+    })
+    setLiveLog({ title: logTitle, content: initialLog, updatedAt: timeLabel(locale) })
     try {
-      let result
-      if (command === 'install') result = await apiRef.current.install(target, selectedAppDir)
-      else if (command === 'restore') result = await apiRef.current.restore(target, selectedAppDir)
-      else if (command === 'open') result = await apiRef.current.open(target, selectedAppDir)
-      else result = await apiRef.current.checkUpdate(target, selectedAppDir)
+      const result = await apiRef.current.runAction(command, target, selectedAppDir, (nextProgress) => {
+        setActionProgress(nextProgress)
+        if (nextProgress.type === 'result' || !nextProgress.log?.trim()) return
+        const nextLine = nextProgress.log.trim()
+        if (streamedLogLines.current[streamedLogLines.current.length - 1] !== nextLine) {
+          streamedLogLines.current.push(nextLine)
+        }
+        setLiveLog({
+          title: logTitle,
+          content: streamedLogLines.current.join('\n'),
+          updatedAt: timeLabel(locale),
+        })
+      })
 
       const successMessage = locale === 'zh-CN'
         ? result.message
@@ -253,6 +295,16 @@ function App() {
       }
     } catch (error) {
       const detail = String(error)
+      setActionProgress({
+        type: 'result',
+        action: command,
+        phase: 'error',
+        progress: 100,
+        message: detail,
+        log: detail,
+        done: true,
+        ok: false,
+      })
       setLiveLog({ title: logTitle, content: detail, updatedAt: timeLabel(locale) })
       addActivity({
         tone: 'danger',
@@ -379,6 +431,40 @@ function App() {
             </button>
           </div>
           <p className={`action-hint ${status.localized ? 'good' : 'warn'}`}>{status.localized ? copy.installedHint : copy.installHint}</p>
+
+          {actionProgress ? (
+            <section
+              className={`progress-panel ${actionProgress.done ? actionProgress.ok ? 'complete' : 'failed' : 'running'}`}
+              aria-live="polite"
+              aria-label={copy.progressTitle}
+            >
+              <div className="progress-heading">
+                <div className="progress-title">
+                  {actionProgress.done
+                    ? actionProgress.ok
+                      ? <CheckCircle2 size={18} aria-hidden="true" />
+                      : <AlertCircle size={18} aria-hidden="true" />
+                    : <Loader2 className="spin" size={18} aria-hidden="true" />}
+                  <div><span>{copy.progressTitle}</span><strong>{progressLabel}</strong></div>
+                </div>
+                <span className="progress-percent">{progressPercent}%</span>
+              </div>
+              <div
+                className="progress-track"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent}
+                aria-label={progressLabel}
+              >
+                <span style={{ width: `${progressPercent}%` }} />
+              </div>
+              <div className="progress-detail">
+                <span>{actionProgress.message}</span>
+                {!actionProgress.done ? <small>{copy.progressBackgroundNote}</small> : null}
+              </div>
+            </section>
+          ) : null}
 
           <section className="log-panel" aria-live="polite">
             <div className="panel-heading">
