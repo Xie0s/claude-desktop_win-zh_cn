@@ -15,6 +15,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKUP_ROOT = Path(os.environ.get("LOCALAPPDATA", "")) / "Claude-zh-CN-official-backup"
+PATCH_STATE_PATH = BACKUP_ROOT / "json-only" / "patch-state.json"
 CONFIG_PATH = Path(os.environ.get("APPDATA", "")) / "Claude" / "config.json"
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 STREAM_PROGRESS = False
@@ -195,17 +196,40 @@ def locale_is_zh() -> bool:
     return data.get("locale") == "zh-CN"
 
 
+def file_has_zh_locale(path: Path) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return "zh-CN" in text and ("\"zh-CN\"" in text or "'zh-CN'" in text)
+
+
+def same_app_dir(left: Path, right: Path) -> bool:
+    return os.path.normcase(os.path.abspath(str(left))) == os.path.normcase(os.path.abspath(str(right)))
+
+
 def whitelist_has_zh(app_dir: Path) -> bool:
-    assets = app_dir / "resources" / "ion-dist" / "assets"
+    resources = app_dir / "resources"
+    assets = resources / "ion-dist" / "assets"
     if not assets.exists():
         return False
-    for path in assets.rglob("index-*.js"):
+
+    if PATCH_STATE_PATH.is_file():
         try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        if "zh-CN" in text and ("\"zh-CN\"" in text or "'zh-CN'" in text):
-            return True
+            state = json.loads(PATCH_STATE_PATH.read_text(encoding="utf-8"))
+            state_app_dir = Path(state.get("app_dir", ""))
+            whitelist_files = state.get("whitelist_files", [])
+            if same_app_dir(state_app_dir, app_dir) and isinstance(whitelist_files, list):
+                for relative in whitelist_files:
+                    if isinstance(relative, str) and file_has_zh_locale(resources / relative):
+                        return True
+        except (OSError, ValueError, TypeError):
+            pass
+
+    for pattern in ("index-*.js", "shared-*.js"):
+        for path in assets.rglob(pattern):
+            if file_has_zh_locale(path):
+                return True
     return False
 
 
@@ -217,6 +241,17 @@ def zh_resources_present(app_dir: Path) -> bool:
         resources / "ion-dist" / "i18n" / "statsig" / "zh-CN.json",
     ]
     return all(path.is_file() for path in targets)
+
+
+def wait_for_localization(app_dir: Path, timeout: float = 60.0, poll_interval: float = 1.0) -> bool:
+    deadline = time.monotonic() + max(0.0, timeout)
+    while True:
+        if zh_resources_present(app_dir) and whitelist_has_zh(app_dir):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(max(0.01, poll_interval), remaining))
 
 
 def python_available() -> bool:
@@ -470,7 +505,16 @@ def action_install(
             "log": "\n".join(lines),
         }
 
-    step("verify", 92, "[校验] 正在检查中文资源和语言白名单...")
+    step("verify", 92, "[校验] 正在等待管理员进程完成写入并检查中文资源...")
+    if not wait_for_localization(resolved):
+        step("error", 100, "[校验] 安装后校验未通过，请查看上方输出。")
+        return {
+            "ok": False,
+            "state": "repair",
+            "message": "安装后校验未通过。",
+            "log": "\n".join(lines),
+        }
+
     status = build_status(target=target, app_dir=str(resolved))
     if not status["localized"]:
         step("error", 100, "[校验] 安装后校验未通过，请查看上方输出。")

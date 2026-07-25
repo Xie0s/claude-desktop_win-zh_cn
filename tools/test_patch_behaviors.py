@@ -131,7 +131,7 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_END__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH__" in content
     assert "__CLAUDE_ZH_CN_SESSION_DELETE_PATCH_VERSION__" in content
-    assert 'const VERSION = "44"' in content
+    assert 'const VERSION = "46"' in content
     assert "claude-zh-cn-session-delete-button" in content
     assert "claude-zh-cn-session-export-button" in content
     assert "claude-zh-cn-session-move-button" in content
@@ -202,7 +202,15 @@ def test_session_delete_runtime_is_injected() -> None:
     assert "function hasNativeRowControl" in content
     assert "function isNearSidebarBottom" in content
     assert "function isNearViewportSidebarBottom" in content
+    assert "function isViewportSidebarFooterNode" in content
+    assert "function providerIdentityText" in content
+    assert "function explicitSessionActionAncestor" in content
+    assert "function sessionActionAncestor" in content
     assert "function cleanupProviderToolbarActions" in content
+    assert "function nodeContainsInjectedAction" in content
+    assert "if (actionButtonsChanged) cleanupProviderToolbarActions();" in content
+    assert "push(mutation.target?.parentElement);" in content
+    assert "characterData: true" in content
     assert "function looksLikeProviderIdentity" in content
     assert "if (row?.matches?.(selector)) controls.push(row);" in content
     assert "cleanupRejectedRows();" in content
@@ -481,8 +489,11 @@ def test_session_delete_runtime_recognizes_new_session_rows_in_dom() -> None:
         "contextButtons": 0,
         "modeTabButtons": 0,
         "customNavButtons": 0,
+        "lateFooterButtons": 0,
+        "footerSessionButtons": 3,
+        "recycledProviderButtons": 0,
         "timelineCount": 2,
-        "candidateCount": 6,
+        "candidateCount": 7,
     }
     for key, value in expected_counts.items():
         assert payload[key] == value
@@ -1503,6 +1514,7 @@ def test_launcher_bridge_streams_install_progress() -> None:
         mock.patch.object(bridge, "resolve_app_dir", return_value=app_dir),
         mock.patch.object(bridge, "stop_claude"),
         mock.patch.object(bridge, "run_python_script", side_effect=fake_run_script),
+        mock.patch.object(bridge, "wait_for_localization", return_value=True) as wait_for_localization,
         mock.patch.object(bridge, "build_status", return_value={"localized": True}),
     ):
         result = bridge.action_install(
@@ -1514,12 +1526,63 @@ def test_launcher_bridge_streams_install_progress() -> None:
     phases = [phase for phase, _, _ in events]
     percentages = [percent for _, percent, _ in events]
     assert result["ok"] is True
+    wait_for_localization.assert_called_once_with(app_dir)
     assert phases[0] == "prepare"
     assert "resources" in phases
     assert "runtime" in phases
     assert "verify" in phases
     assert phases[-1] == "complete"
     assert percentages[0] < percentages[-1] == 100
+
+
+def test_launcher_bridge_reads_shared_whitelist_from_current_patch_state() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        app_dir = tmp_path / "Claude" / "app"
+        resources = app_dir / "resources"
+        shared = resources / "ion-dist" / "assets" / "v1" / "shared-1-test.js"
+        shared.parent.mkdir(parents=True)
+        shared.write_text('const locales=["en-US","fr-FR","zh-CN"];', encoding="utf-8")
+        patch_state = tmp_path / "patch-state.json"
+        patch_state.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "app_dir": str(app_dir),
+                    "whitelist_files": ["ion-dist/assets/v1/shared-1-test.js"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        bridge = load_module("launcher_bridge_shared_state_test", ROOT / "tools" / "launcher_bridge.py")
+        bridge.PATCH_STATE_PATH = patch_state
+
+        assert bridge.whitelist_has_zh(app_dir) is True
+
+
+def test_launcher_bridge_ignores_stale_patch_state_and_scans_shared_chunks() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        app_dir = tmp_path / "Claude" / "app"
+        resources = app_dir / "resources"
+        shared = resources / "ion-dist" / "assets" / "v1" / "shared-fallback.js"
+        shared.parent.mkdir(parents=True)
+        shared.write_text('const locales=["en-US","de-DE","zh-CN"];', encoding="utf-8")
+        patch_state = tmp_path / "patch-state.json"
+        patch_state.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "app_dir": str(tmp_path / "old-Claude" / "app"),
+                    "whitelist_files": ["ion-dist/assets/v1/missing.js"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        bridge = load_module("launcher_bridge_shared_fallback_test", ROOT / "tools" / "launcher_bridge.py")
+        bridge.PATCH_STATE_PATH = patch_state
+
+        assert bridge.whitelist_has_zh(app_dir) is True
 
 
 def test_background_progress_contract_is_wired_across_rust_and_react() -> None:
@@ -2182,7 +2245,7 @@ def test_assets_tree_injects_session_tools_runtime() -> None:
     assert "claude-zh-cn-session-delete-button" in content
     assert "claude-zh-cn-session-export-button" in content
     assert "claude-zh-cn-conversation-timeline" in content
-    assert 'const VERSION = "44"' in content
+    assert 'const VERSION = "46"' in content
 
 
 def test_chunk_patch_translates_custom_label() -> None:

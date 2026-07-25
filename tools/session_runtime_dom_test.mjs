@@ -237,6 +237,7 @@ function notifyMutation(type = "childList", attributeName = "", target = documen
   for (const observer of mutationObservers) {
     if (type === "attributes" && !observer.options?.attributes) continue;
     if (type === "attributes" && observer.options?.attributeFilter && !observer.options.attributeFilter.includes(attributeName)) continue;
+    if (type === "characterData" && !observer.options?.characterData) continue;
     if (type === "childList" && !observer.options?.childList) continue;
     observer.cb([{ type, attributeName, target, addedNodes, removedNodes }]);
   }
@@ -355,6 +356,40 @@ const thirdPartyVerbose = new Element(
 thirdPartyVerbose.appendChild(new Element("button", { class: "claude-zh-cn-session-action-button" }));
 thirdPartyVerbose.appendChild(new Element("button", { class: "claude-zh-cn-session-action-button" }));
 aside.appendChild(thirdPartyVerbose);
+const footerSession = new Element(
+  "div",
+  { "data-y": 584, "data-width": 300, "data-height": 40 },
+  "底部普通历史会话"
+);
+footerSession.setAttribute("data-claude-zh-cn-delete-row", "true");
+footerSession.appendChild(new Element("button", {
+  class: "claude-zh-cn-session-action-button claude-zh-cn-session-move-button",
+  "data-y": 590,
+  "data-width": 26,
+  "data-height": 26,
+  "data-x": 220,
+}));
+footerSession.appendChild(new Element("button", {
+  class: "claude-zh-cn-session-action-button claude-zh-cn-session-export-button",
+  "data-y": 590,
+  "data-width": 26,
+  "data-height": 26,
+  "data-x": 252,
+}));
+footerSession.appendChild(new Element("button", {
+  class: "claude-zh-cn-session-action-button claude-zh-cn-session-delete-button",
+  "data-y": 590,
+  "data-width": 26,
+  "data-height": 26,
+  "data-x": 284,
+}));
+aside.appendChild(footerSession);
+const recycledProvider = new Element(
+  "div",
+  { "data-y": 68, "data-width": 300, "data-height": 40 },
+  "稍后复用的历史会话"
+);
+aside.appendChild(recycledProvider);
 const longTitle = new Element("a", { href: "/chat/longtitle123456", "data-y": 82, "data-height": 168 }, "这是一个很长很长的历史会话标题，用来模拟侧栏换行之后高度超过普通单行的真实会话");
 aside.appendChild(longTitle);
 const slashTitle = new Element("div", { "data-y": 194 }, "glos/agent-safety-kit");
@@ -398,6 +433,42 @@ body.appendChild(projectPanel);
 
 eval(runtime);
 flushTimers();
+
+const recycledProviderText = recycledProvider.children.find((node) => node.nodeType === 3);
+recycledProviderText.nodeValue = "JASOY · Gateway";
+recycledProviderText.textContent = "JASOY · Gateway";
+recycledProviderText.innerText = "JASOY · Gateway";
+recycledProvider.textContent = "JASOY · Gateway";
+recycledProvider.innerText = "JASOY · Gateway";
+notifyMutation("characterData", "", recycledProviderText, [], []);
+body.dispatchEvent({ type: "pointerover", target: recycledProvider });
+flushTimers(200);
+
+const lateFooter = new Element("div", {
+  "data-y": 690,
+  "data-width": 340,
+  "data-height": 64,
+  "data-x": 0,
+}, "");
+const lateMove = new Element("button", {
+  class: "claude-zh-cn-session-action-button claude-zh-cn-session-move-button",
+  "data-y": 704,
+  "data-width": 26,
+  "data-height": 26,
+  "data-x": 220,
+});
+const lateExport = new Element("button", {
+  class: "claude-zh-cn-session-action-button claude-zh-cn-session-export-button",
+  "data-y": 704,
+  "data-width": 26,
+  "data-height": 26,
+  "data-x": 264,
+});
+lateFooter.appendChild(lateMove);
+lateFooter.appendChild(lateExport);
+body.appendChild(lateFooter);
+flushTimers();
+
 nestedChild.dispatchEvent({ type: "pointerover", target: nestedChild });
 body.dispatchEvent({ type: "pointerover", target: nestedChild });
 flushTimers();
@@ -440,6 +511,9 @@ const thirdPartySelfButtons = thirdPartySelfButton.children.filter((node) => Str
 const thirdPartyFooterButtons = thirdPartyFooter.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const thirdPartyVerboseButtons = thirdPartyVerbose.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const viewportProviderButtons = viewportProvider.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
+const lateFooterButtons = lateFooter.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
+const footerSessionButtons = footerSession.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
+const recycledProviderButtons = recycledProvider.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const projectButtons = project.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const longTitleButtons = longTitle.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
 const slashTitleButtons = slashTitle.children.filter((node) => String(node.className || "").includes("claude-zh-cn-session-action-button")).length;
@@ -490,6 +564,9 @@ if (thirdPartySelfButtons !== 0) throw new Error(`third-party self button button
 if (thirdPartyFooterButtons !== 0) throw new Error(`third-party footer buttons=${thirdPartyFooterButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (thirdPartyVerboseButtons !== 0) throw new Error(`third-party verbose buttons=${thirdPartyVerboseButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (viewportProviderButtons !== 0) throw new Error(`viewport provider buttons=${viewportProviderButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
+if (lateFooterButtons !== 0) throw new Error(`late footer buttons=${lateFooterButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
+if (footerSessionButtons !== 3) throw new Error(`footer session buttons=${footerSessionButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
+if (recycledProviderButtons !== 0) throw new Error(`recycled provider buttons=${recycledProviderButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (thirdPartyFooter.getAttribute("data-claude-zh-cn-delete-row") === "true") throw new Error(`stale provider footer row flag=${JSON.stringify(debugCounts)}`);
 if (longTitleButtons !== 3) throw new Error(`long title session buttons=${longTitleButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
 if (slashTitleButtons !== 3) throw new Error(`slash title session buttons=${slashTitleButtons} state=${JSON.stringify(state)} debug=${JSON.stringify(debugCounts)}`);
@@ -510,4 +587,4 @@ if (!exportMarkdown.includes("Claude 回复内容")) throw new Error(`export mis
 if (!exportMarkdown.includes("新版 DOM 用户问题")) throw new Error(`export missing human markdown=${JSON.stringify(exportMarkdown)} roles=${JSON.stringify(exportRoles)}`);
 if (!exportMarkdown.includes("## 用户") || !exportMarkdown.includes("## Claude")) throw new Error(`export missing roles markdown=${JSON.stringify(exportMarkdown)} roles=${JSON.stringify(exportRoles)}`);
 
-console.log(JSON.stringify({ before, after, currentNewButtons, thirdPartyToolbarButtons, thirdPartySelfButtons, thirdPartyFooterButtons, thirdPartyVerboseButtons, viewportProviderButtons, longTitleButtons, slashTitleButtons, nestedParentButtons, nestedChildButtons, placeholderButtons, projectButtons, filePathTitleButtons, progressButtons, filesButtons, contextButtons, modeTabButtons, customNavButtons, timelineCount, candidateCount: state.candidateCount, exportHasUser: exportMarkdown.includes("用户提出的问题"), exportHasAssistant: exportMarkdown.includes("Claude 回复内容"), exportRoles }));
+console.log(JSON.stringify({ before, after, currentNewButtons, thirdPartyToolbarButtons, thirdPartySelfButtons, thirdPartyFooterButtons, thirdPartyVerboseButtons, viewportProviderButtons, lateFooterButtons, footerSessionButtons, recycledProviderButtons, longTitleButtons, slashTitleButtons, nestedParentButtons, nestedChildButtons, placeholderButtons, projectButtons, filePathTitleButtons, progressButtons, filesButtons, contextButtons, modeTabButtons, customNavButtons, timelineCount, candidateCount: state.candidateCount, exportHasUser: exportMarkdown.includes("用户提出的问题"), exportHasAssistant: exportMarkdown.includes("Claude 回复内容"), exportRoles }));
